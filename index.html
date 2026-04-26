@@ -302,7 +302,7 @@ const SAMPLE_CONTACTS = [
   {id:uid(),sectionId:'leads',      subsectionId:'leads-qual',firma:'Sonnleitner & Partner',email:'s.sonnleitner@partner.at',telefon:'+43 676 555 22 11',status:'In Gespräch',notizen:'Zweites Meeting nächste Woche.',umsatz:12000,reminders:[],activities:[],customValues:{}},
   {id:uid(),sectionId:'kaltkontakte',subsectionId:null,       firma:'Bergkristall GmbH',email:'info@bergkristall.at',telefon:'+43 732 55 66 77',status:'Kalt',notizen:'Auf Messe getroffen.',umsatz:'',reminders:[],activities:[],customValues:{}},
 ];
-const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[]};
+const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[]};
 
 const lbl = {display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'};
 
@@ -329,6 +329,8 @@ const Icons = {
   Check:   ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.4"/><path d="M4 6.5l2 2 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   Shield:  ()=><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L2 4v4c0 3 2.2 5.8 5 6.5 2.8-.7 5-3.5 5-6.5V4L7 1.5z" stroke="rgba(255,255,255,0.3)" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
   Auth:    ()=><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="6" width="12" height="7" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="1.3"/><path d="M4 6V4.5a3 3 0 016 0V6" stroke="rgba(255,255,255,0.3)" strokeWidth="1.3" strokeLinecap="round"/><circle cx="7" cy="9.5" r="1.2" fill="rgba(255,255,255,0.3)"/></svg>,
+  Bot:     ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="2" y="4" width="9" height="7" rx="1.8" stroke="currentColor" strokeWidth="1.3"/><circle cx="5" cy="7.5" r="0.9" fill="currentColor"/><circle cx="8" cy="7.5" r="0.9" fill="currentColor"/><path d="M6.5 1.5v2.5M5 2.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  Doc:     ()=><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 1.5h5L9.5 3.5v7a1 1 0 01-1 1h-6a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M7 1.5v2.5h2.5M3.5 6.5h5M3.5 8.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 // ── STATUS DOT ───────────────────────────────────────────────────
@@ -1084,45 +1086,84 @@ const TODO_PRIORITIES = [{key:'hoch',label:'Hoch',color:'#ef4444',bg:'#FEF2F2'},
 
 function TodoView({todos, onUpdate}) {
   const [newText, setNewText] = useState('');
+  const [newDesc, setNewDesc] = useState('');
   const [newDate, setNewDate] = useState('');
   const [newPriority, setNewPriority] = useState('');
   const [showDone, setShowDone] = useState(false);
+  const [filterPriority, setFilterPriority] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
   const today = new Date().toISOString().slice(0,10);
 
-  const open = todos.filter(t=>!t.done).sort((a,b)=>{
+  const sortByPriority = (a,b) => {
     const pi=['hoch','mittel','niedrig'];
     const pa=pi.indexOf(a.priority),pb=pi.indexOf(b.priority);
     if(pa!==pb)return(pa===-1?99:pa)-(pb===-1?99:pb);
     return (a.dueDate||'9999').localeCompare(b.dueDate||'9999');
-  });
+  };
+  const open = todos.filter(t=>!t.done).sort(sortByPriority);
   const done = todos.filter(t=>t.done);
+
+  const filteredOpen = filterPriority ? open.filter(t=>t.priority===filterPriority) : open;
+
+  const counts = {
+    hoch: open.filter(t=>t.priority==='hoch').length,
+    mittel: open.filter(t=>t.priority==='mittel').length,
+    niedrig: open.filter(t=>t.priority==='niedrig').length,
+    keine: open.filter(t=>!t.priority).length,
+  };
 
   const addTodo = () => {
     if(!newText.trim()) return;
-    onUpdate([...todos,{id:uid(),text:newText.trim(),done:false,priority:newPriority,dueDate:newDate,createdAt:today}]);
-    setNewText(''); setNewDate(''); setNewPriority('');
+    onUpdate([...todos,{id:uid(),text:newText.trim(),description:newDesc.trim(),done:false,priority:newPriority,dueDate:newDate,createdAt:today}]);
+    setNewText(''); setNewDesc(''); setNewDate(''); setNewPriority('');
   };
   const toggle = id => onUpdate(todos.map(t=>t.id===id?{...t,done:!t.done,doneAt:!t.done?today:null}:t));
   const remove = id => onUpdate(todos.filter(t=>t.id!==id));
+  const updateDesc = (id, description) => onUpdate(todos.map(t=>t.id===id?{...t,description}:t));
 
   const pMeta = key => TODO_PRIORITIES.find(p=>p.key===key);
 
   const TodoItem = ({t}) => {
     const overdue = !t.done && t.dueDate && t.dueDate < today;
+    const expanded = expandedId === t.id;
+    const [editingDesc, setEditingDesc] = useState(false);
+    const [draftDesc, setDraftDesc] = useState(t.description||'');
+    const priColor = t.priority ? pMeta(t.priority)?.color : '#E5E1DC';
+
     return(
-      <div style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 16px',borderRadius:12,background:'white',border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',marginBottom:8,transition:'opacity 0.15s',opacity:t.done?0.55:1}}>
-        <button onClick={()=>toggle(t.id)} style={{marginTop:1,flexShrink:0,width:20,height:20,borderRadius:6,border:t.done?'none':'1.5px solid #D4CFC9',background:t.done?'#141210':'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all 0.15s'}}>
-          {t.done&&<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-        </button>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:500,color:'#141210',lineHeight:1.4,textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
-            {t.priority&&pMeta(t.priority)&&<span style={{fontSize:11,fontWeight:600,padding:'1px 7px',borderRadius:99,background:pMeta(t.priority).bg,color:pMeta(t.priority).color}}>{pMeta(t.priority).label}</span>}
-            {t.dueDate&&<span style={{fontSize:11.5,color:overdue?'#B45309':'#A8A39D',fontWeight:overdue?600:400}}>{overdue?'⚠ ':''}{fmtDate(t.dueDate)}</span>}
+      <div style={{background:'white',borderRadius:12,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',marginBottom:8,transition:'opacity 0.15s, box-shadow 0.15s',opacity:t.done?0.55:1,borderLeft:`3px solid ${priColor}`,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 16px'}}>
+          <button onClick={()=>toggle(t.id)} style={{marginTop:1,flexShrink:0,width:20,height:20,borderRadius:6,border:t.done?'none':'1.5px solid #D4CFC9',background:t.done?'#141210':'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all 0.15s'}}>
+            {t.done&&<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+          <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setExpandedId(expanded?null:t.id)}>
+            <div style={{fontSize:14,fontWeight:500,color:'#141210',lineHeight:1.4,textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4,flexWrap:'wrap'}}>
+              {t.priority&&pMeta(t.priority)&&<span style={{fontSize:11,fontWeight:600,padding:'1px 7px',borderRadius:99,background:pMeta(t.priority).bg,color:pMeta(t.priority).color}}>{pMeta(t.priority).label}</span>}
+              {t.dueDate&&<span style={{fontSize:11.5,color:overdue?'#B45309':'#A8A39D',fontWeight:overdue?600:400}}>{overdue?'⚠ ':''}{fmtDate(t.dueDate)}</span>}
+              {t.description&&!expanded&&<span style={{fontSize:11.5,color:'#A8A39D',display:'flex',alignItems:'center',gap:4}}><Icons.Doc/>Beschreibung</span>}
+            </div>
           </div>
+          <button onClick={()=>setExpandedId(expanded?null:t.id)} style={{background:'none',border:'none',color:'#C8C3BD',cursor:'pointer',padding:'2px 6px',lineHeight:1,flexShrink:0,fontSize:12,transition:'transform 0.2s, color 0.15s',transform:expanded?'rotate(180deg)':'rotate(0)'}} onMouseEnter={e=>e.currentTarget.style.color='#6B6560'} onMouseLeave={e=>e.currentTarget.style.color='#C8C3BD'}>▾</button>
+          <button onClick={()=>remove(t.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,padding:'0 4px',lineHeight:1,flexShrink:0,transition:'color 0.15s'}}
+            onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
         </div>
-        <button onClick={()=>remove(t.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,padding:'0 4px',lineHeight:1,flexShrink:0,transition:'color 0.15s'}}
-          onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+        {expanded&&(
+          <div style={{padding:'4px 16px 14px 48px',borderTop:'1px solid rgba(0,0,0,0.05)',background:'#FAFAF8'}}>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginTop:10,marginBottom:6}}>Beschreibung</div>
+            {editingDesc?(
+              <div>
+                <textarea value={draftDesc} onChange={e=>setDraftDesc(e.target.value)} placeholder="Mehr Details zur Aufgabe…" style={{minHeight:80,fontSize:13}} autoFocus/>
+                <div style={{display:'flex',gap:8,marginTop:8}}>
+                  <button className="btn btn-primary btn-sm" onClick={()=>{updateDesc(t.id,draftDesc.trim());setEditingDesc(false);}}>Speichern</button>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>{setDraftDesc(t.description||'');setEditingDesc(false);}}>Abbrechen</button>
+                </div>
+              </div>
+            ):(
+              <div onClick={()=>setEditingDesc(true)} style={{fontSize:13,color:t.description?'#3F3A35':'#B0ABA5',lineHeight:1.5,whiteSpace:'pre-wrap',cursor:'text',padding:'6px 0',fontStyle:t.description?'normal':'italic'}}>{t.description||'Klick zum Hinzufügen einer Beschreibung…'}</div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1130,20 +1171,51 @@ function TodoView({todos, onUpdate}) {
   return(
     <div style={{flex:1,overflowY:'auto',padding:28}}>
       {/* Add new todo */}
-      <div style={{background:'white',borderRadius:14,padding:20,marginBottom:24,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
-        <div style={{display:'flex',gap:10,marginBottom:12}}>
+      <div style={{background:'white',borderRadius:14,padding:20,marginBottom:20,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',gap:10,marginBottom:10}}>
           <input value={newText} onChange={e=>setNewText(e.target.value)} placeholder="Neue Aufgabe hinzufügen…"
             onKeyDown={e=>e.key==='Enter'&&addTodo()} style={{flex:1}}/>
           <button className="btn btn-primary" onClick={addTodo} disabled={!newText.trim()}><Icons.Plus/>Hinzufügen</button>
         </div>
-        <div style={{display:'flex',gap:10}}>
-          <select value={newPriority} onChange={e=>setNewPriority(e.target.value)} style={{flex:1,padding:'8px 12px',fontSize:12.5,background:'#F5F3F0',border:'1.5px solid transparent',color:newPriority?'#141210':'#A8A39D'}}>
-            <option value="">Priorität (optional)</option>
-            {TODO_PRIORITIES.map(p=><option key={p.key} value={p.key}>{p.label}</option>)}
-          </select>
-          <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} style={{flex:1,padding:'8px 12px',fontSize:12.5,background:'#F5F3F0',border:'1.5px solid transparent'}}/>
+        <textarea value={newDesc} onChange={e=>setNewDesc(e.target.value)} placeholder="Beschreibung (optional) — Details, Notizen, Kontext…" style={{marginBottom:10,minHeight:60,fontSize:13}}/>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{fontSize:11.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginRight:4}}>Priorität:</div>
+          <div style={{display:'flex',gap:6}}>
+            {TODO_PRIORITIES.map(p=>{
+              const active = newPriority === p.key;
+              return(
+                <button key={p.key} onClick={()=>setNewPriority(active?'':p.key)} style={{padding:'6px 12px',borderRadius:99,fontSize:12,fontWeight:600,border:`1.5px solid ${active?p.color:'transparent'}`,background:active?p.bg:'#F5F3F0',color:active?p.color:'#6B6560',cursor:'pointer',transition:'all 0.15s'}}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} style={{flex:1,minWidth:140,padding:'6px 12px',fontSize:12.5,background:'#F5F3F0',border:'1.5px solid transparent'}}/>
         </div>
       </div>
+
+      {/* Priority overview */}
+      {open.length > 0 && (
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8,padding:'0 4px'}}>Prioritäten</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
+            {[
+              {key:'hoch',label:'Hoch',count:counts.hoch,color:'#ef4444',bg:'#FEF2F2'},
+              {key:'mittel',label:'Mittel',count:counts.mittel,color:'#f59e0b',bg:'#FFFBEB'},
+              {key:'niedrig',label:'Niedrig',count:counts.niedrig,color:'#6B6560',bg:'#F5F3F0'},
+              {key:'',label:'Alle',count:open.length,color:'#141210',bg:'#FAFAF8'},
+            ].map(p=>{
+              const active = filterPriority === p.key;
+              return(
+                <button key={p.key||'all'} onClick={()=>setFilterPriority(active && p.key ? '' : p.key)} style={{textAlign:'left',padding:'12px 14px',borderRadius:11,border:`1.5px solid ${active?p.color:'rgba(0,0,0,0.07)'}`,background:active?p.bg:'white',cursor:'pointer',transition:'all 0.15s',boxShadow:active?'none':'0 1px 4px rgba(0,0,0,0.04)'}}>
+                  <div style={{fontSize:11.5,fontWeight:600,color:p.color,letterSpacing:'0.02em',marginBottom:2}}>{p.label}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:'#141210',letterSpacing:'-0.02em'}}>{p.count}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Open tasks */}
       {open.length === 0 && done.length === 0 && (
@@ -1158,7 +1230,10 @@ function TodoView({todos, onUpdate}) {
           <div style={{fontSize:15,fontWeight:600,color:'#C0BBB5'}}>Alle Aufgaben erledigt!</div>
         </div>
       )}
-      {open.map(t=><TodoItem key={t.id} t={t}/>)}
+      {filteredOpen.length === 0 && open.length > 0 && filterPriority && (
+        <div style={{textAlign:'center',padding:'40px 20px',color:'#C8C3BD',fontSize:14}}>Keine Aufgaben mit dieser Priorität.</div>
+      )}
+      {filteredOpen.map(t=><TodoItem key={t.id} t={t}/>)}
 
       {/* Done tasks */}
       {done.length > 0 && (
@@ -1172,6 +1247,321 @@ function TodoView({todos, onUpdate}) {
       )}
     </div>
   );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  AI EMPLOYEES VIEW
+// ══════════════════════════════════════════════════════════════════
+const AI_STATUS = [
+  {key:'aktiv',label:'Aktiv',color:'#16a34a',bg:'#F0FDF4',dot:'#22c55e'},
+  {key:'pausiert',label:'Pausiert',color:'#d97706',bg:'#FFFBEB',dot:'#f59e0b'},
+  {key:'inaktiv',label:'Inaktiv',color:'#6B6560',bg:'#F5F3F0',dot:'#A8A39D'},
+];
+
+const COMMON_MODELS = ['Claude Opus 4.7','Claude Sonnet 4.6','Claude Haiku 4.5','GPT-4o','GPT-4 Turbo','GPT-3.5','Gemini 2.0 Pro','Gemini 1.5 Flash','Llama 3.1 70B','Mistral Large','Anderes…'];
+
+const AI_AVATARS = ['🤖','🦾','🧠','⚡','🔮','💡','🎯','📊','📝','🔍','💼','🛠️','🎨','📞','📧'];
+
+function fmtRelativeTime(ts){
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff/60000);
+  if(m<1) return 'gerade eben';
+  if(m<60) return `vor ${m} Min`;
+  const h = Math.floor(m/60);
+  if(h<24) return `vor ${h} Std`;
+  const d = Math.floor(h/24);
+  if(d<7) return `vor ${d} ${d===1?'Tag':'Tagen'}`;
+  return new Date(ts).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+
+function AIEmployeeModal({employee, onSave, onClose, onDelete}){
+  const isNew = !employee;
+  const [form, setForm] = useState(employee || {
+    id: uid(),
+    name: '',
+    avatar: '🤖',
+    model: 'Claude Opus 4.7',
+    customModel: '',
+    account: '',
+    responsibilities: '',
+    status: 'aktiv',
+    activities: [],
+    createdAt: new Date().toISOString(),
+  });
+  const updField = (k,v) => setForm(f=>({...f,[k]:v}));
+  const submit = () => {
+    if(!form.name.trim()) return;
+    const finalModel = form.model === 'Anderes…' ? form.customModel.trim() : form.model;
+    onSave({...form, name:form.name.trim(), model:finalModel || form.model, account:form.account.trim(), responsibilities:form.responsibilities.trim()});
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:560}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.01em'}}>{isNew?'Neuen KI Mitarbeiter hinzufügen':'KI Mitarbeiter bearbeiten'}</h2>
+            <div style={{fontSize:12,color:'#A8A39D',marginTop:2}}>Verwalte deine KI-Helfer an einem Ort.</div>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{display:'flex',gap:14,marginBottom:14}}>
+          <div style={{flexShrink:0}}>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Avatar</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,32px)',gap:4,maxWidth:172}}>
+              {AI_AVATARS.map(a=>(
+                <button key={a} onClick={()=>updField('avatar',a)} style={{width:32,height:32,borderRadius:8,fontSize:18,border:form.avatar===a?'2px solid #141210':'1.5px solid rgba(0,0,0,0.08)',background:form.avatar===a?'#FAFAF8':'white',cursor:'pointer',transition:'all 0.15s'}}>{a}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Name</div>
+              <input value={form.name} onChange={e=>updField('name',e.target.value)} placeholder="z.B. Bertha, Max, Sales-Bot…" autoFocus/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Status</div>
+              <div style={{display:'flex',gap:6}}>
+                {AI_STATUS.map(s=>{
+                  const active = form.status === s.key;
+                  return(
+                    <button key={s.key} onClick={()=>updField('status',s.key)} style={{flex:1,padding:'7px 10px',borderRadius:9,fontSize:12,fontWeight:600,border:`1.5px solid ${active?s.color:'transparent'}`,background:active?s.bg:'#F5F3F0',color:active?s.color:'#6B6560',cursor:'pointer',transition:'all 0.15s'}}>{s.label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Modell</div>
+          <select value={form.model} onChange={e=>updField('model',e.target.value)}>
+            {COMMON_MODELS.map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
+          {form.model === 'Anderes…' && (
+            <input style={{marginTop:8}} value={form.customModel} onChange={e=>updField('customModel',e.target.value)} placeholder="Modell-Name eingeben…"/>
+          )}
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Account / Plattform</div>
+          <input value={form.account} onChange={e=>updField('account',e.target.value)} placeholder="z.B. webars-main, openai-pro, anthropic-team…"/>
+        </div>
+
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Zuständigkeit</div>
+          <textarea value={form.responsibilities} onChange={e=>updField('responsibilities',e.target.value)} placeholder="Wofür ist diese KI zuständig? z.B. Email-Antworten, Lead-Recherche, Content erstellen…" style={{minHeight:70}}/>
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'space-between'}}>
+          {!isNew && onDelete ? (
+            <button className="btn btn-danger" onClick={()=>{if(confirm('KI Mitarbeiter wirklich löschen?'))onDelete(form.id);}}><Icons.Trash/>Löschen</button>
+          ) : <div></div>}
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+            <button className="btn btn-primary" onClick={submit} disabled={!form.name.trim()}>{isNew?'Hinzufügen':'Speichern'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AIEmployeeDetail({employee, onBack, onUpdate, onEdit}){
+  const [newActivity, setNewActivity] = useState('');
+  const statusMeta = AI_STATUS.find(s=>s.key===employee.status) || AI_STATUS[0];
+  const activities = (employee.activities||[]).slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+
+  const addActivity = () => {
+    if(!newActivity.trim()) return;
+    const updated = {...employee, activities:[...(employee.activities||[]),{id:uid(),timestamp:new Date().toISOString(),text:newActivity.trim()}]};
+    onUpdate(updated);
+    setNewActivity('');
+  };
+  const removeActivity = (aid) => {
+    const updated = {...employee, activities:(employee.activities||[]).filter(a=>a.id!==aid)};
+    onUpdate(updated);
+  };
+
+  // Group activities by date
+  const grouped = activities.reduce((acc,a)=>{
+    const d = new Date(a.timestamp).toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+    if(!acc[d]) acc[d]=[];
+    acc[d].push(a);
+    return acc;
+  },{});
+
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:28}}>
+      <button onClick={onBack} style={{background:'none',border:'none',color:'#6B6560',fontSize:13,cursor:'pointer',padding:'4px 0',marginBottom:16,display:'flex',alignItems:'center',gap:6,fontWeight:500}}>← Zurück zur Übersicht</button>
+
+      {/* Header card */}
+      <div style={{background:'white',borderRadius:14,padding:24,marginBottom:20,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:18}}>
+          <div style={{width:64,height:64,borderRadius:14,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32,flexShrink:0}}>{employee.avatar||'🤖'}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6,flexWrap:'wrap'}}>
+              <h1 style={{fontSize:22,fontWeight:800,letterSpacing:'-0.02em'}}>{employee.name}</h1>
+              <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px 3px 7px',borderRadius:99,background:statusMeta.bg,fontSize:11.5,fontWeight:600,color:statusMeta.color}}>
+                <span style={{width:5,height:5,borderRadius:'50%',background:statusMeta.dot}}></span>{statusMeta.label}
+              </span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginTop:14}}>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Modell</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{employee.model||'—'}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Account</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{employee.account||'—'}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Aktivitäten</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{activities.length}</div>
+              </div>
+            </div>
+            {employee.responsibilities && (
+              <div style={{marginTop:16,padding:'12px 14px',background:'#FAFAF8',borderRadius:10,borderLeft:'3px solid #141210'}}>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:4}}>Zuständigkeit</div>
+                <div style={{fontSize:13.5,color:'#3F3A35',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{employee.responsibilities}</div>
+              </div>
+            )}
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onEdit}><Icons.Edit/>Bearbeiten</button>
+        </div>
+      </div>
+
+      {/* Activity log */}
+      <div style={{background:'white',borderRadius:14,padding:20,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <Icons.Activity/>
+          <h2 style={{fontSize:14.5,fontWeight:700,letterSpacing:'-0.01em'}}>Aktivitäts-Log</h2>
+          <div style={{fontSize:12,color:'#A8A39D',marginLeft:'auto'}}>Was hat {employee.name} gemacht?</div>
+        </div>
+
+        <div style={{display:'flex',gap:8,marginBottom:18}}>
+          <input value={newActivity} onChange={e=>setNewActivity(e.target.value)} placeholder="Was wurde erledigt? z.B. 10 Leads recherchiert, Newsletter geschrieben…"
+            onKeyDown={e=>e.key==='Enter'&&addActivity()} style={{flex:1}}/>
+          <button className="btn btn-primary" onClick={addActivity} disabled={!newActivity.trim()}><Icons.Plus/>Eintragen</button>
+        </div>
+
+        {activities.length === 0 ? (
+          <div style={{textAlign:'center',padding:'40px 20px',color:'#C8C3BD'}}>
+            <div style={{fontSize:32,marginBottom:8,opacity:.4}}>📋</div>
+            <div style={{fontSize:14,fontWeight:600,color:'#C0BBB5'}}>Noch keine Einträge.</div>
+            <div style={{fontSize:12.5,color:'#C0BBB5',marginTop:4}}>Halte fest, woran {employee.name} arbeitet.</div>
+          </div>
+        ) : (
+          <div>
+            {Object.entries(grouped).map(([date,items])=>(
+              <div key={date} style={{marginBottom:18}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8,paddingLeft:4}}>{date}</div>
+                {items.map(a=>(
+                  <div key={a.id} style={{display:'flex',gap:12,padding:'10px 14px',borderRadius:10,background:'#FAFAF8',marginBottom:6,alignItems:'flex-start'}}>
+                    <div style={{width:6,height:6,borderRadius:'50%',background:'#141210',marginTop:7,flexShrink:0}}></div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13.5,color:'#141210',lineHeight:1.45,whiteSpace:'pre-wrap'}}>{a.text}</div>
+                      <div style={{fontSize:11.5,color:'#A8A39D',marginTop:3}}>{new Date(a.timestamp).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} · {fmtRelativeTime(a.timestamp)}</div>
+                    </div>
+                    <button onClick={()=>removeActivity(a.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,padding:'0 4px',lineHeight:1,flexShrink:0,transition:'color 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AIEmployeesView({employees, onUpdate, externalNewTrigger, onExternalNewHandled}){
+  const [modal, setModal] = useState(null); // null | 'new' | {edit: emp}
+  const [selectedId, setSelectedId] = useState(null);
+
+  useEffect(()=>{
+    if(externalNewTrigger){
+      setSelectedId(null);
+      setModal('new');
+      onExternalNewHandled && onExternalNewHandled();
+    }
+  },[externalNewTrigger]);
+
+  const selected = selectedId ? employees.find(e=>e.id===selectedId) : null;
+
+  const saveEmployee = (emp) => {
+    const exists = employees.find(e=>e.id===emp.id);
+    onUpdate(exists ? employees.map(e=>e.id===emp.id?emp:e) : [...employees, emp]);
+    setModal(null);
+  };
+  const removeEmployee = (id) => {
+    onUpdate(employees.filter(e=>e.id!==id));
+    setModal(null);
+    setSelectedId(null);
+  };
+  const updateOne = (emp) => {
+    onUpdate(employees.map(e=>e.id===emp.id?emp:e));
+  };
+
+  if(selected){
+    return(<>
+      <AIEmployeeDetail employee={selected} onBack={()=>setSelectedId(null)} onUpdate={updateOne} onEdit={()=>setModal({edit:selected})}/>
+      {modal && modal.edit && <AIEmployeeModal employee={modal.edit} onSave={emp=>{saveEmployee(emp);}} onClose={()=>setModal(null)} onDelete={removeEmployee}/>}
+    </>);
+  }
+
+  return(<>
+    <div style={{flex:1,overflowY:'auto',padding:28}}>
+      {employees.length === 0 ? (
+        <div style={{textAlign:'center',padding:'80px 20px',color:'#C8C3BD'}}>
+          <div style={{fontSize:48,marginBottom:16,opacity:.6}}>🤖</div>
+          <div style={{fontSize:17,fontWeight:700,color:'#3F3A35',marginBottom:6}}>Noch keine KI Mitarbeiter</div>
+          <div style={{fontSize:13,color:'#A8A39D',marginBottom:20,maxWidth:380,margin:'0 auto 20px'}}>Behalte den Überblick über alle deine KI-Helfer: welches Modell, welcher Account, wofür sie zuständig sind und was sie erledigt haben.</div>
+          <button className="btn btn-primary" onClick={()=>setModal('new')}><Icons.Plus/>Ersten KI Mitarbeiter hinzufügen</button>
+        </div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+          {employees.map(e=>{
+            const statusMeta = AI_STATUS.find(s=>s.key===e.status) || AI_STATUS[0];
+            const lastActivity = (e.activities||[]).slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp))[0];
+            return(
+              <button key={e.id} onClick={()=>setSelectedId(e.id)} style={{textAlign:'left',background:'white',borderRadius:14,padding:18,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',cursor:'pointer',transition:'all 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                onMouseEnter={ev=>{ev.currentTarget.style.transform='translateY(-2px)';ev.currentTarget.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';}}
+                onMouseLeave={ev=>{ev.currentTarget.style.transform='translateY(0)';ev.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';}}>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{width:46,height:46,borderRadius:11,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>{e.avatar||'🤖'}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:'#141210',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.name}</div>
+                    <div style={{fontSize:11.5,color:'#6B6560',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.model||'—'}</div>
+                  </div>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 7px 2px 6px',borderRadius:99,background:statusMeta.bg,fontSize:10.5,fontWeight:600,color:statusMeta.color,flexShrink:0}}>
+                    <span style={{width:4,height:4,borderRadius:'50%',background:statusMeta.dot}}></span>{statusMeta.label}
+                  </span>
+                </div>
+                {e.account && <div style={{fontSize:11.5,color:'#A8A39D',padding:'4px 8px',background:'#FAFAF8',borderRadius:6,fontFamily:'monospace',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.account}</div>}
+                {e.responsibilities && (
+                  <div style={{fontSize:12.5,color:'#3F3A35',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{e.responsibilities}</div>
+                )}
+                <div style={{borderTop:'1px solid rgba(0,0,0,0.05)',paddingTop:10,marginTop:'auto',display:'flex',alignItems:'center',gap:8,fontSize:11.5,color:'#A8A39D'}}>
+                  <Icons.Activity/>
+                  {lastActivity ? (
+                    <span style={{flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Zuletzt {fmtRelativeTime(lastActivity.timestamp)}</span>
+                  ) : (
+                    <span style={{flex:1,fontStyle:'italic'}}>Noch keine Aktivität</span>
+                  )}
+                  <span style={{fontWeight:600,color:'#6B6560'}}>{(e.activities||[]).length}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+    {modal === 'new' && <AIEmployeeModal onSave={saveEmployee} onClose={()=>setModal(null)}/>}
+    {modal && modal.edit && <AIEmployeeModal employee={modal.edit} onSave={saveEmployee} onClose={()=>setModal(null)} onDelete={removeEmployee}/>}
+  </>);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1395,8 +1785,10 @@ function CRMApp({cryptoKey, initialData, onLock}) {
     subsections: initialData.subsections || DEFAULT_SUBSECTIONS,
     members: initialData.members || [],
     todos: initialData.todos || [],
+    aiEmployees: initialData.aiEmployees || [],
   }));
   const TODOS_VIEW = '__todos__';
+  const AI_VIEW = '__ai__';
   const [activeId,setActiveId]=useState(initialData.sections[0]?.id);
   const [activeSubId,setActiveSubId]=useState(null);
   const [search,setSearch]=useState('');
@@ -1468,6 +1860,16 @@ function CRMApp({cryptoKey, initialData, onLock}) {
               {open>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{open}</span>}
             </button>
           );})()}
+          {/* KI Mitarbeiter */}
+          {(()=>{const isActive=activeId===AI_VIEW;const count=(state.aiEmployees||[]).length;return(
+            <button onClick={()=>setActiveId(AI_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
+              onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,.05)';}}
+              onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:13,width:18,textAlign:'center',flexShrink:0,opacity:isActive?1:.5}}><Icons.Bot/></span>
+              <span style={{flex:1,fontSize:13.5,fontWeight:isActive?600:400,color:isActive?'white':'rgba(255,255,255,.5)',textAlign:'left',letterSpacing:'-0.01em'}}>KI Mitarbeiter</span>
+              {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
+            </button>
+          );})()}
           {state.sections.map(s=>{
             const count=state.contacts.filter(c=>c.sectionId===s.id).length;
             const isActive=s.id===activeId;
@@ -1510,6 +1912,20 @@ function CRMApp({cryptoKey, initialData, onLock}) {
             </div>
           </div>
           <TodoView todos={state.todos||[]} onUpdate={todos=>upd({todos})}/>
+        </>) : activeId === AI_VIEW ? (<>
+          <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+            <div style={{flex:1}}>
+              <h1 style={{fontSize:18,fontWeight:800,letterSpacing:'-0.02em'}}>KI Mitarbeiter</h1>
+              <div style={{fontSize:12,color:'#B0ABA5',marginTop:2,display:'flex',gap:12,alignItems:'center'}}>
+                <span>{(state.aiEmployees||[]).length} {(state.aiEmployees||[]).length===1?'Mitarbeiter':'Mitarbeiter'}</span>
+                {(state.aiEmployees||[]).filter(e=>e.status==='aktiv').length>0&&<span>· {(state.aiEmployees||[]).filter(e=>e.status==='aktiv').length} aktiv</span>}
+              </div>
+            </div>
+            {(state.aiEmployees||[]).length>0 && (
+              <button className="btn btn-primary" onClick={()=>setModal('addAI')}><Icons.Plus/>Neuer KI Mitarbeiter</button>
+            )}
+          </div>
+          <AIEmployeesView employees={state.aiEmployees||[]} onUpdate={aiEmployees=>upd({aiEmployees})} externalNewTrigger={modal==='addAI'} onExternalNewHandled={()=>setModal(null)}/>
         </>) : (<>
         <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
           <div style={{flex:1}}>
