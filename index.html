@@ -775,6 +775,11 @@ function AuthScreen({mode, onDone, onReset, onSwitchMode, prefilledInvite}) {
               <div style={{fontSize:15,fontWeight:700,color:'white',marginBottom:4}}>Willkommen zurück</div>
               <div style={{fontSize:12.5,color:'rgba(255,255,255,0.35)',lineHeight:1.6}}>Gib deine E-Mail-Adresse ein um fortzufahren.</div>
             </div>
+            {!hasSetup() && (
+              <div style={{fontSize:12.5,color:'rgba(255,200,100,0.85)',padding:'10px 12px',background:'rgba(255,200,100,0.08)',borderRadius:8,lineHeight:1.5,border:'1px solid rgba(255,200,100,0.18)'}}>
+                ⚠ Auf diesem Gerät ist noch kein Konto eingerichtet. Du musst dich erst einrichten — entweder mit Einladungs-Link oder als Owner.
+              </div>
+            )}
             <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="deine@email.at"
               className="auth-input" type="email" autoFocus
               onKeyDown={e=>e.key==='Enter'&&submitLoginEmail()}/>
@@ -2410,7 +2415,7 @@ function AuthWrapper(){
     setPhase('app');
   };
 
-  if(phase==='setup')return <AuthScreen mode="setup" prefilledInvite={prefilledInvite} onDone={completeAuth} onSwitchMode={hasSetup()?()=>setPhase('login'):null}/>;
+  if(phase==='setup')return <AuthScreen mode="setup" prefilledInvite={prefilledInvite} onDone={completeAuth} onSwitchMode={()=>setPhase('login')}/>;
   if(phase==='login')return <AuthScreen mode="login" onDone={completeAuth} onReset={handleReset} onSwitchMode={()=>setPhase('setup')}/>;
   if(phase==='app'&&cryptoKey&&crmData)return <CRMApp cryptoKey={cryptoKey} initialData={crmData} onLock={()=>setPhase('login')} onLogout={handleLogout}/>;
   return null;
