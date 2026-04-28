@@ -61,6 +61,25 @@
   .auth-btn:disabled{opacity:.5!important;cursor:not-allowed!important;transform:none!important;}
   .spinner{width:20px;height:20px;border:2px solid rgba(0,0,0,.15);border-top-color:#0F0E0C;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
   .totp-input{font-size:28px!important;letter-spacing:10px!important;text-align:center!important;font-weight:700!important;padding:16px!important;font-variant-numeric:tabular-nums!important;}
+
+  /* ── PRINT VIEW (Quotes) ── */
+  .quote-print-page{background:#F0EDE8;padding:40px 20px;min-height:100vh;}
+  .quote-paper{background:white;width:210mm;min-height:297mm;margin:0 auto;padding:24mm 20mm;box-shadow:0 8px 24px rgba(0,0,0,0.1);font-size:10.5pt;color:#141210;line-height:1.55;}
+  .quote-paper h1{font-size:22pt;font-weight:800;letter-spacing:-0.02em;}
+  .quote-paper h2{font-size:14pt;font-weight:700;letter-spacing:-0.01em;}
+  .quote-paper table{width:100%;border-collapse:collapse;margin:14pt 0;}
+  .quote-paper th,.quote-paper td{padding:8pt 10pt;text-align:left;font-size:10pt;}
+  .quote-paper th{border-bottom:1.5pt solid #141210;font-weight:700;font-size:9pt;text-transform:uppercase;letter-spacing:0.04em;}
+  .quote-paper tbody tr{border-bottom:0.5pt solid #E0DCD7;}
+  .quote-paper tbody tr:last-child{border-bottom:none;}
+  .quote-paper .num{text-align:right;font-variant-numeric:tabular-nums;}
+  @media print{
+    body{background:white!important;}
+    .quote-print-page{background:white!important;padding:0!important;}
+    .quote-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:18mm 16mm!important;min-height:auto!important;}
+    .quote-no-print{display:none!important;}
+    @page{size:A4;margin:0;}
+  }
 </style>
 </head>
 <body>
@@ -478,7 +497,25 @@ const SAMPLE_CONTACTS = [
   {id:uid(),sectionId:'leads',      subsectionId:'leads-qual',firma:'Sonnleitner & Partner',email:'s.sonnleitner@partner.at',telefon:'+43 676 555 22 11',status:'In Gespräch',notizen:'Zweites Meeting nächste Woche.',umsatz:12000,reminders:[],activities:[],customValues:{}},
   {id:uid(),sectionId:'kaltkontakte',subsectionId:null,       firma:'Bergkristall GmbH',email:'info@bergkristall.at',telefon:'+43 732 55 66 77',status:'Kalt',notizen:'Auf Messe getroffen.',umsatz:'',reminders:[],activities:[],customValues:{}},
 ];
-const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[]};
+const DEFAULT_QUOTE_SETTINGS = {
+  companyName:'WebArs',
+  companyAddress:'',
+  companyEmail:'',
+  companyPhone:'',
+  companyWebsite:'',
+  taxId:'', // USt-IdNr / UID
+  iban:'',
+  bic:'',
+  bankName:'',
+  defaultIntro:'Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihr Interesse. Hiermit übersenden wir Ihnen unser Angebot wie folgt:',
+  defaultTerms:'Zahlungsziel: 14 Tage netto.\nDieses Angebot ist 30 Tage gültig.\nAlle Preise verstehen sich in Euro.',
+  defaultFooter:'Mit freundlichen Grüßen',
+  taxRate:20,
+  currency:'EUR',
+  quoteCounter:1,
+  quotePrefix:'AN'
+};
+const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS};
 
 const lbl = {display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'};
 
@@ -509,6 +546,9 @@ const Icons = {
   Doc:     ()=><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 1.5h5L9.5 3.5v7a1 1 0 01-1 1h-6a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M7 1.5v2.5h2.5M3.5 6.5h5M3.5 8.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   Logout:  ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5.5 1.5h-3a1 1 0 00-1 1v8a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8.5 4l2.5 2.5L8.5 9M11 6.5H5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   Cloud:   ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3.5 9.5a2.5 2.5 0 010-5 3.5 3.5 0 016.6-1A2.5 2.5 0 1110 9.5h-6.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+  Quote:   ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="2" y="1.5" width="9" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.3"/><path d="M4 4.5h5M4 6.5h5M4 8.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  Print:   ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3 5V2h7v3M3 9.5H2a1 1 0 01-1-1v-3a1 1 0 011-1h9a1 1 0 011 1v3a1 1 0 01-1 1h-1M3 8h7v3.5H3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+  Mail:    ()=><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="3" width="10" height="7" rx="1.3" stroke="currentColor" strokeWidth="1.3"/><path d="M2 4l4.5 3 4.5-3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
 };
 
 // ── STATUS DOT ───────────────────────────────────────────────────
@@ -1277,7 +1317,7 @@ function ContactModal({contact,sections,customFields,onSave,onClose}){
   </div></div>);
 }
 
-function ContactDetail({contact,sections,onClose,onUpdate,onEdit}){
+function ContactDetail({contact,sections,quotes,settings,onClose,onUpdate,onEdit,onCreateQuote,onOpenQuote}){
   const [tab,setTab]=useState('aktivitäten');
   const [newAct,setNewAct]=useState('');
   const [remText,setRemText]=useState('');
@@ -1309,7 +1349,7 @@ function ContactDetail({contact,sections,onClose,onUpdate,onEdit}){
         {section&&<div style={{marginTop:10,fontSize:11.5,color:'#C0BBB5',fontWeight:500,display:'flex',alignItems:'center',gap:5}}><span>{section.icon}</span>{section.name}</div>}
       </div>
       <div style={{display:'flex',borderBottom:'1px solid #F0EDE9',padding:'0 28px',flexShrink:0}}>
-        {[{id:'aktivitäten',icon:<Icons.Activity/>},{id:'erinnerungen',icon:<Icons.Reminder/>}].map(t=>(
+        {[{id:'aktivitäten',icon:<Icons.Activity/>},{id:'erinnerungen',icon:<Icons.Reminder/>},{id:'angebote',icon:<Icons.Quote/>}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',padding:'13px 0',marginRight:22,fontSize:12.5,fontWeight:600,color:tab===t.id?'#141210':'#B0ABA5',borderBottom:tab===t.id?'2px solid #141210':'2px solid transparent',display:'flex',alignItems:'center',gap:6,transition:'all .15s',textTransform:'capitalize'}}>{t.icon}{t.id}</button>
         ))}
       </div>
@@ -1337,6 +1377,38 @@ function ContactDetail({contact,sections,onClose,onUpdate,onEdit}){
             </div>);
           })}
         </>)}
+        {tab==='angebote'&&(()=>{
+          const cQuotes = (quotes||[]).filter(q=>q.contactId===contact.id).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+          const cur = settings?.currency || 'EUR';
+          return(<>
+            <button className="btn btn-primary" style={{width:'100%',marginBottom:14,justifyContent:'center'}} onClick={onCreateQuote}><Icons.Plus/>Neues Angebot für {contact.firma}</button>
+            {cQuotes.length===0?(
+              <div style={{fontSize:13,color:'#C8C3BD',textAlign:'center',paddingTop:20}}>Noch keine Angebote für diesen Kunden.</div>
+            ):cQuotes.map(q=>{
+              const totals = quoteTotals(q);
+              const status = QUOTE_STATUSES.find(s=>s.key===q.status) || QUOTE_STATUSES[0];
+              return(
+                <div key={q.id} onClick={()=>onOpenQuote(q)} style={{padding:'12px 14px',borderRadius:10,background:'#FAF9F7',marginBottom:8,cursor:'pointer',border:'1px solid transparent',transition:'all 0.15s'}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor='#E8E4DF'}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor='transparent'}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <span style={{fontFamily:'monospace',fontSize:11,color:'#6B6560',fontWeight:600}}>{q.number}</span>
+                        <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'1px 6px',borderRadius:99,background:status.bg,fontSize:10,fontWeight:600,color:status.color}}>
+                          <span style={{width:4,height:4,borderRadius:'50%',background:status.dot}}></span>{status.label}
+                        </span>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{q.title || '(ohne Titel)'}</div>
+                      <div style={{fontSize:11.5,color:'#A8A39D',marginTop:2}}>{fmtDate(q.date)}</div>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtMoney(totals.total,cur)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </>);
+        })()}
       </div>
     </div>
   </div>);
@@ -1878,6 +1950,454 @@ function AIEmployeesView({employees, onUpdate, externalNewTrigger, onExternalNew
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  QUOTES (Angebote)
+// ══════════════════════════════════════════════════════════════════
+const QUOTE_STATUSES = [
+  {key:'entwurf',label:'Entwurf',color:'#6B6560',bg:'#F5F3F0',dot:'#A8A39D'},
+  {key:'gesendet',label:'Gesendet',color:'#1d4ed8',bg:'#EFF6FF',dot:'#3b82f6'},
+  {key:'akzeptiert',label:'Akzeptiert',color:'#16a34a',bg:'#F0FDF4',dot:'#22c55e'},
+  {key:'abgelehnt',label:'Abgelehnt',color:'#C0392B',bg:'#FEF2F2',dot:'#ef4444'},
+];
+
+function fmtMoney(amount, currency='EUR') {
+  const n = Number(amount) || 0;
+  return new Intl.NumberFormat('de-DE',{style:'currency',currency,minimumFractionDigits:2}).format(n);
+}
+
+function nextQuoteNumber(settings) {
+  const year = new Date().getFullYear();
+  const num = String(settings.quoteCounter || 1).padStart(3,'0');
+  return `${settings.quotePrefix || 'AN'}-${year}-${num}`;
+}
+
+function blankQuote(contact, settings) {
+  return {
+    id: uid(),
+    number: nextQuoteNumber(settings),
+    contactId: contact?.id || null,
+    contactSnapshot: contact ? {
+      firma: contact.firma || '',
+      ansprechpartner: contact.ansprechpartner || '',
+      email: contact.email || '',
+      telefon: contact.telefon || '',
+      adresse: contact.adresse || ''
+    } : {firma:'',ansprechpartner:'',email:'',telefon:'',adresse:''},
+    title: '',
+    date: new Date().toISOString().slice(0,10),
+    validUntil: new Date(Date.now()+30*86400000).toISOString().slice(0,10),
+    intro: settings.defaultIntro,
+    items: [{id:uid(),description:'',quantity:1,unitPrice:0}],
+    taxRate: settings.taxRate || 20,
+    discount: 0,
+    notes: '',
+    terms: settings.defaultTerms,
+    footer: settings.defaultFooter,
+    status: 'entwurf',
+    sentAt: null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function quoteTotals(quote) {
+  const subtotal = (quote.items||[]).reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitPrice)||0), 0);
+  const discount = Number(quote.discount)||0;
+  const afterDiscount = Math.max(0, subtotal - discount);
+  const tax = afterDiscount * (Number(quote.taxRate)||0) / 100;
+  const total = afterDiscount + tax;
+  return {subtotal, discount, afterDiscount, tax, total};
+}
+
+// ── Quote Settings Modal ─────────────────────────────────────────
+function QuoteSettingsModal({settings, onSave, onClose}){
+  const [s, setS] = useState(settings || DEFAULT_QUOTE_SETTINGS);
+  const u = (k,v)=>setS(p=>({...p,[k]:v}));
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:580}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700}}>Angebots-Vorlage</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Diese Daten werden in jedem Angebot verwendet.</p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Firma</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+          <input value={s.companyName} onChange={e=>u('companyName',e.target.value)} placeholder="Firmenname"/>
+          <input value={s.taxId} onChange={e=>u('taxId',e.target.value)} placeholder="UID / USt-IdNr"/>
+        </div>
+        <textarea value={s.companyAddress} onChange={e=>u('companyAddress',e.target.value)} placeholder="Adresse (mehrzeilig)" style={{minHeight:60,marginBottom:10}}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:18}}>
+          <input value={s.companyEmail} onChange={e=>u('companyEmail',e.target.value)} placeholder="Email"/>
+          <input value={s.companyPhone} onChange={e=>u('companyPhone',e.target.value)} placeholder="Telefon"/>
+          <input value={s.companyWebsite} onChange={e=>u('companyWebsite',e.target.value)} placeholder="Website"/>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Bankverbindung</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <input value={s.bankName} onChange={e=>u('bankName',e.target.value)} placeholder="Bank"/>
+          <input value={s.bic} onChange={e=>u('bic',e.target.value)} placeholder="BIC"/>
+        </div>
+        <input value={s.iban} onChange={e=>u('iban',e.target.value)} placeholder="IBAN" style={{marginBottom:18,fontFamily:'monospace'}}/>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standardtexte</div>
+        <textarea value={s.defaultIntro} onChange={e=>u('defaultIntro',e.target.value)} placeholder="Anrede / Einleitung" style={{minHeight:70,marginBottom:10}}/>
+        <textarea value={s.defaultTerms} onChange={e=>u('defaultTerms',e.target.value)} placeholder="Bedingungen" style={{minHeight:70,marginBottom:10}}/>
+        <input value={s.defaultFooter} onChange={e=>u('defaultFooter',e.target.value)} placeholder="Grußformel (z.B. Mit freundlichen Grüßen)" style={{marginBottom:18}}/>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standard-Werte</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:18}}>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>USt-Satz %</div>
+            <input type="number" value={s.taxRate} onChange={e=>u('taxRate',Number(e.target.value)||0)}/>
+          </div>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Währung</div>
+            <select value={s.currency} onChange={e=>u('currency',e.target.value)}>
+              <option value="EUR">EUR €</option><option value="CHF">CHF</option><option value="USD">USD $</option><option value="GBP">GBP £</option>
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Nummer-Präfix</div>
+            <input value={s.quotePrefix} onChange={e=>u('quotePrefix',e.target.value)}/>
+          </div>
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={()=>{onSave(s);onClose();}}>Speichern</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Quote Editor ─────────────────────────────────────────────────
+function QuoteEditor({quote, contacts, settings, onSave, onClose, onPreview}){
+  const [q, setQ] = useState(quote);
+  const u = (k,v)=>setQ(p=>({...p,[k]:v}));
+  const totals = quoteTotals(q);
+  const cur = settings.currency || 'EUR';
+
+  const updateItem = (id, field, value) => {
+    setQ(p=>({...p, items:p.items.map(it=>it.id===id?{...it,[field]:value}:it)}));
+  };
+  const addItem = () => setQ(p=>({...p,items:[...p.items,{id:uid(),description:'',quantity:1,unitPrice:0}]}));
+  const removeItem = (id) => setQ(p=>({...p,items:p.items.filter(it=>it.id!==id)}));
+
+  const updContact = (k,v) => setQ(p=>({...p, contactSnapshot:{...p.contactSnapshot,[k]:v}}));
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:760,maxHeight:'92vh'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+          <div style={{flex:1}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+              <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.01em'}}>Angebot {q.number}</h2>
+              <select value={q.status} onChange={e=>u('status',e.target.value)} style={{width:'auto',padding:'4px 8px',fontSize:11.5,fontWeight:600,background:'#F5F3F0',border:'1.5px solid transparent'}}>
+                {QUOTE_STATUSES.map(st=><option key={st.key} value={st.key}>{st.label}</option>)}
+              </select>
+            </div>
+            <p style={{fontSize:12.5,color:'#A8A39D'}}>Erstelle und passe dein Angebot an.</p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:10,marginBottom:14}}>
+          <input value={q.title} onChange={e=>u('title',e.target.value)} placeholder="Betreff (z.B. Webseite Relaunch)"/>
+          <div><div style={{fontSize:11,color:'#A8A39D',marginBottom:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Datum</div><input type="date" value={q.date} onChange={e=>u('date',e.target.value)}/></div>
+          <div><div style={{fontSize:11,color:'#A8A39D',marginBottom:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Gültig bis</div><input type="date" value={q.validUntil} onChange={e=>u('validUntil',e.target.value)}/></div>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Kunde</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <input value={q.contactSnapshot.firma} onChange={e=>updContact('firma',e.target.value)} placeholder="Firma"/>
+          <input value={q.contactSnapshot.ansprechpartner} onChange={e=>updContact('ansprechpartner',e.target.value)} placeholder="Ansprechpartner"/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <input value={q.contactSnapshot.email} onChange={e=>updContact('email',e.target.value)} placeholder="Email" type="email"/>
+          <input value={q.contactSnapshot.telefon} onChange={e=>updContact('telefon',e.target.value)} placeholder="Telefon"/>
+        </div>
+        <textarea value={q.contactSnapshot.adresse} onChange={e=>updContact('adresse',e.target.value)} placeholder="Adresse (mehrzeilig)" style={{minHeight:50,marginBottom:18}}/>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Einleitung</div>
+        <textarea value={q.intro} onChange={e=>u('intro',e.target.value)} style={{minHeight:60,marginBottom:18}}/>
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em'}}>Positionen</div>
+          <button className="btn btn-ghost btn-sm" onClick={addItem}><Icons.Plus/>Position</button>
+        </div>
+        <div style={{border:'1px solid #EAE6E0',borderRadius:10,overflow:'hidden',marginBottom:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 110px 32px',gap:8,padding:'8px 12px',background:'#FAFAF8',fontSize:10.5,fontWeight:700,color:'#6B6560',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+            <div>Beschreibung</div><div style={{textAlign:'right'}}>Menge</div><div style={{textAlign:'right'}}>Einzelpreis</div><div style={{textAlign:'right'}}>Summe</div><div></div>
+          </div>
+          {q.items.map(it=>{
+            const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
+            return(
+              <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 110px 32px',gap:8,padding:'8px 12px',borderTop:'1px solid #F0EDE8',alignItems:'flex-start'}}>
+                <textarea value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="Beschreibung der Leistung…" style={{minHeight:38,padding:'6px 8px',fontSize:12.5,resize:'vertical'}}/>
+                <input type="number" step="0.01" value={it.quantity} onChange={e=>updateItem(it.id,'quantity',e.target.value)} style={{padding:'6px 8px',fontSize:12.5,textAlign:'right'}}/>
+                <input type="number" step="0.01" value={it.unitPrice} onChange={e=>updateItem(it.id,'unitPrice',e.target.value)} style={{padding:'6px 8px',fontSize:12.5,textAlign:'right'}}/>
+                <div style={{padding:'8px 8px',fontSize:13,fontWeight:600,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtMoney(lineTotal,cur)}</div>
+                <button onClick={()=>removeItem(it.id)} disabled={q.items.length<=1} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:18,padding:'4px 4px 0',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:14,marginBottom:18}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Notizen / interne Hinweise</div>
+            <textarea value={q.notes} onChange={e=>u('notes',e.target.value)} placeholder="Werden NICHT im Angebot angezeigt — nur für dich" style={{minHeight:70}}/>
+          </div>
+          <div style={{background:'#FAFAF8',padding:14,borderRadius:10,border:'1px solid #EAE6E0'}}>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'4px 0'}}><span>Zwischensumme</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:500}}>{fmtMoney(totals.subtotal,cur)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13,padding:'4px 0'}}>
+              <span>Rabatt</span>
+              <input type="number" step="0.01" value={q.discount} onChange={e=>u('discount',Number(e.target.value)||0)} style={{width:90,padding:'4px 8px',fontSize:12,textAlign:'right'}}/>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13,padding:'4px 0'}}>
+              <span>USt</span>
+              <span style={{display:'flex',alignItems:'center',gap:4}}>
+                <input type="number" value={q.taxRate} onChange={e=>u('taxRate',Number(e.target.value)||0)} style={{width:50,padding:'4px 6px',fontSize:12,textAlign:'right'}}/>
+                <span style={{fontSize:12,color:'#6B6560'}}>%</span>
+                <span style={{fontVariantNumeric:'tabular-nums',fontWeight:500,minWidth:80,textAlign:'right'}}>{fmtMoney(totals.tax,cur)}</span>
+              </span>
+            </div>
+            <div style={{borderTop:'2px solid #141210',marginTop:8,paddingTop:8,display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:700}}><span>Gesamt</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.total,cur)}</span></div>
+          </div>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Bedingungen / Hinweise</div>
+        <textarea value={q.terms} onChange={e=>u('terms',e.target.value)} style={{minHeight:60,marginBottom:18}}/>
+
+        <div style={{display:'flex',gap:10,justifyContent:'space-between',paddingTop:14,borderTop:'1px solid #EAE6E0'}}>
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-ghost" onClick={()=>{onSave(q);onPreview && onPreview(q);}}><Icons.Print/>Vorschau</button>
+            <button className="btn btn-primary" onClick={()=>onSave(q)}>Speichern</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Quote Preview / Print View ───────────────────────────────────
+function QuotePreview({quote, settings, onClose, onMarkSent}){
+  const totals = quoteTotals(quote);
+  const cur = settings.currency || 'EUR';
+  const fmtD = iso => iso ? new Date(iso).toLocaleDateString('de-AT',{day:'2-digit',month:'long',year:'numeric'}) : '';
+  const status = QUOTE_STATUSES.find(s=>s.key===quote.status) || QUOTE_STATUSES[0];
+
+  const handlePrint = () => { window.print(); };
+  const handleEmail = () => {
+    const c = quote.contactSnapshot;
+    const subject = `Angebot ${quote.number}${quote.title?' — '+quote.title:''}`;
+    const body = `${c.ansprechpartner?'Sehr geehrte/r '+c.ansprechpartner+',':'Sehr geehrte Damen und Herren,'}
+
+anbei übersenden wir Ihnen unser Angebot ${quote.number}${quote.title?' für '+quote.title:''}.
+
+Gesamtbetrag: ${fmtMoney(totals.total,cur)}
+Gültig bis: ${fmtD(quote.validUntil)}
+
+Bei Fragen stehe ich gerne zur Verfügung.
+
+${settings.defaultFooter || 'Mit freundlichen Grüßen'}
+${settings.companyName || ''}`;
+    const mailto = `mailto:${encodeURIComponent(c.email||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
+    if (quote.status === 'entwurf') onMarkSent && onMarkSent();
+  };
+
+  return(
+    <div className="quote-print-page" style={{position:'fixed',inset:0,zIndex:1000,overflow:'auto'}}>
+      {/* Floating action bar */}
+      <div className="quote-no-print" style={{position:'sticky',top:0,zIndex:10,background:'rgba(15,14,12,0.92)',backdropFilter:'blur(8px)',padding:'12px 20px',display:'flex',gap:10,alignItems:'center',justifyContent:'center',marginBottom:20,marginLeft:-20,marginRight:-20,marginTop:-40,boxShadow:'0 4px 20px rgba(0,0,0,0.2)'}}>
+        <div style={{color:'rgba(255,255,255,0.5)',fontSize:12.5,marginRight:'auto'}}>
+          Angebot {quote.number} · <span style={{color:status.color,fontWeight:600,padding:'2px 7px',background:'rgba(255,255,255,0.1)',borderRadius:99,fontSize:11}}>{status.label}</span>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={handleEmail} style={{color:'white',borderColor:'rgba(255,255,255,0.2)'}}><Icons.Mail/>Per Email senden</button>
+        <button className="btn btn-primary btn-sm" onClick={handlePrint}><Icons.Print/>Drucken / PDF</button>
+        <button onClick={onClose} style={{background:'rgba(255,255,255,0.1)',border:'none',borderRadius:8,padding:8,color:'white',lineHeight:0,cursor:'pointer'}}><Icons.Close/></button>
+      </div>
+
+      <div className="quote-paper">
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12mm'}}>
+          <div>
+            <div style={{fontWeight:800,fontSize:'14pt',letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
+            {settings.companyAddress && <div style={{fontSize:'9pt',color:'#555',whiteSpace:'pre-line',marginTop:'2mm',lineHeight:1.5}}>{settings.companyAddress}</div>}
+            <div style={{fontSize:'9pt',color:'#555',marginTop:'2mm'}}>
+              {[settings.companyEmail,settings.companyPhone,settings.companyWebsite].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <h1 style={{fontSize:'20pt',fontWeight:800,marginBottom:'2mm'}}>ANGEBOT</h1>
+            <div style={{fontSize:'10pt',color:'#555'}}>Nr. {quote.number}</div>
+            <div style={{fontSize:'10pt',color:'#555'}}>Datum: {fmtD(quote.date)}</div>
+            <div style={{fontSize:'10pt',color:'#555'}}>Gültig bis: {fmtD(quote.validUntil)}</div>
+          </div>
+        </div>
+
+        {/* Customer */}
+        <div style={{marginBottom:'10mm'}}>
+          <div style={{fontSize:'8pt',color:'#888',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'2mm'}}>An</div>
+          <div style={{fontSize:'10pt',fontWeight:600}}>{quote.contactSnapshot.firma}</div>
+          {quote.contactSnapshot.ansprechpartner && <div style={{fontSize:'10pt'}}>z.Hd. {quote.contactSnapshot.ansprechpartner}</div>}
+          {quote.contactSnapshot.adresse && <div style={{fontSize:'10pt',whiteSpace:'pre-line',color:'#333'}}>{quote.contactSnapshot.adresse}</div>}
+        </div>
+
+        {/* Title */}
+        {quote.title && <h2 style={{fontSize:'13pt',fontWeight:700,marginBottom:'4mm'}}>{quote.title}</h2>}
+
+        {/* Intro */}
+        {quote.intro && <div style={{fontSize:'10pt',whiteSpace:'pre-line',marginBottom:'8mm',lineHeight:1.6}}>{quote.intro}</div>}
+
+        {/* Items table */}
+        <table>
+          <thead>
+            <tr>
+              <th style={{width:'52%'}}>Beschreibung</th>
+              <th className="num" style={{width:'12%'}}>Menge</th>
+              <th className="num" style={{width:'18%'}}>Einzelpreis</th>
+              <th className="num" style={{width:'18%'}}>Gesamt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quote.items.map(it=>{
+              const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
+              return(
+                <tr key={it.id}>
+                  <td style={{whiteSpace:'pre-line'}}>{it.description}</td>
+                  <td className="num">{it.quantity}</td>
+                  <td className="num">{fmtMoney(it.unitPrice,cur)}</td>
+                  <td className="num">{fmtMoney(lineTotal,cur)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Totals */}
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:'4mm'}}>
+          <div style={{minWidth:'70mm'}}>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>Zwischensumme</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.subtotal,cur)}</span></div>
+            {totals.discount>0 && <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>Rabatt</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>−{fmtMoney(totals.discount,cur)}</span></div>}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>USt {quote.taxRate}%</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.tax,cur)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'3mm 0',fontSize:'12pt',fontWeight:800,borderTop:'1.5pt solid #141210',marginTop:'2mm'}}><span>Gesamt</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.total,cur)}</span></div>
+          </div>
+        </div>
+
+        {/* Terms */}
+        {quote.terms && (
+          <div style={{marginTop:'10mm',fontSize:'9pt',color:'#444',whiteSpace:'pre-line',lineHeight:1.6,borderTop:'0.5pt solid #DDD',paddingTop:'4mm'}}>
+            {quote.terms}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{marginTop:'12mm',fontSize:'10pt'}}>{quote.footer || 'Mit freundlichen Grüßen'}</div>
+        <div style={{marginTop:'2mm',fontSize:'10pt',fontWeight:600}}>{settings.companyName}</div>
+
+        {/* Bank */}
+        {(settings.iban || settings.bankName) && (
+          <div style={{marginTop:'14mm',paddingTop:'4mm',borderTop:'0.5pt solid #DDD',fontSize:'8.5pt',color:'#777',display:'flex',justifyContent:'space-between',gap:'10mm'}}>
+            <div>
+              {settings.companyName && <span>{settings.companyName} · </span>}
+              {settings.taxId && <span>UID: {settings.taxId}</span>}
+            </div>
+            <div style={{textAlign:'right'}}>
+              {settings.bankName && <div>{settings.bankName}</div>}
+              {settings.iban && <div style={{fontFamily:'monospace'}}>IBAN: {settings.iban}</div>}
+              {settings.bic && <div style={{fontFamily:'monospace'}}>BIC: {settings.bic}</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Quotes List View (Sidebar Section) ───────────────────────────
+function QuotesView({quotes, contacts, settings, onCreate, onOpen, onDelete, onSettings}){
+  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+
+  const filtered = quotes.filter(q=>{
+    if(statusFilter && q.status !== statusFilter) return false;
+    if(search){
+      const s = search.toLowerCase();
+      return [q.number,q.title,q.contactSnapshot?.firma,q.contactSnapshot?.ansprechpartner].some(f=>f && f.toLowerCase().includes(s));
+    }
+    return true;
+  }).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+
+  const totalValue = filtered.reduce((s,q)=>s+quoteTotals(q).total,0);
+  const cur = settings.currency || 'EUR';
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'14px 28px',background:'white',borderBottom:'1px solid rgba(0,0,0,0.07)',display:'flex',gap:12,alignItems:'center',flexShrink:0}}>
+        <div style={{position:'relative',flex:1,maxWidth:280}}>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'#C8C3BD',lineHeight:0}}><Icons.Search/></div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Angebote durchsuchen…" style={{paddingLeft:34,background:'#F5F3F0',border:'1.5px solid transparent'}}/>
+        </div>
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{width:'auto',padding:'9px 12px',fontSize:13,background:'#F5F3F0',border:'1.5px solid transparent',color:statusFilter?'#141210':'#A8A39D'}}>
+          <option value="">Alle Status</option>{QUOTE_STATUSES.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <div style={{flex:1}}></div>
+        <button className="btn btn-ghost btn-sm" onClick={onSettings}><Icons.Field/>Vorlage</button>
+        <button className="btn btn-primary" onClick={()=>onCreate(null)}><Icons.Plus/>Neues Angebot</button>
+      </div>
+
+      <div style={{flex:1,overflowY:'auto',padding:28}}>
+        {filtered.length === 0 ? (
+          <div style={{textAlign:'center',padding:'80px 20px',color:'#C8C3BD'}}>
+            <div style={{fontSize:46,marginBottom:16,opacity:.5}}>📄</div>
+            <div style={{fontSize:16,fontWeight:600,color:'#C0BBB5'}}>{quotes.length===0?'Noch keine Angebote.':'Keine Treffer.'}</div>
+            {quotes.length===0 && <button className="btn btn-primary" style={{marginTop:20}} onClick={()=>onCreate(null)}><Icons.Plus/>Erstes Angebot erstellen</button>}
+          </div>
+        ) : (<>
+          <div style={{fontSize:12.5,color:'#A8A39D',marginBottom:14}}>{filtered.length} {filtered.length===1?'Angebot':'Angebote'} · Gesamt {fmtMoney(totalValue,cur)}</div>
+          <div style={{display:'grid',gap:8}}>
+            {filtered.map(q=>{
+              const totals = quoteTotals(q);
+              const status = QUOTE_STATUSES.find(s=>s.key===q.status) || QUOTE_STATUSES[0];
+              return(
+                <div key={q.id} style={{background:'white',borderRadius:12,padding:'14px 18px',border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.04)',display:'flex',alignItems:'center',gap:14,cursor:'pointer',transition:'all 0.15s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-1px)';e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.06)';}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)';}}
+                  onClick={()=>onOpen(q)}>
+                  <div style={{flexShrink:0,width:44,height:44,borderRadius:10,background:'#FAFAF8',display:'flex',alignItems:'center',justifyContent:'center',color:'#6B6560'}}><Icons.Quote/></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                      <span style={{fontFamily:'monospace',fontSize:11.5,fontWeight:600,color:'#6B6560'}}>{q.number}</span>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 7px',borderRadius:99,background:status.bg,fontSize:10.5,fontWeight:600,color:status.color}}>
+                        <span style={{width:4,height:4,borderRadius:'50%',background:status.dot}}></span>{status.label}
+                      </span>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#141210',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{q.title || '(ohne Titel)'}</div>
+                    <div style={{fontSize:12,color:'#A8A39D',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:2}}>
+                      {q.contactSnapshot?.firma || '—'} · {fmtDate(q.date)}
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.total,cur)}</div>
+                  </div>
+                  <button onClick={ev=>{ev.stopPropagation();if(confirm('Angebot wirklich löschen?'))onDelete(q.id);}} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:18,padding:'4px 6px',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  CRM APP
 // ══════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
@@ -2099,9 +2619,12 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     members: initialData.members || [],
     todos: initialData.todos || [],
     aiEmployees: initialData.aiEmployees || [],
+    quotes: initialData.quotes || [],
+    quoteSettings: {...DEFAULT_QUOTE_SETTINGS, ...(initialData.quoteSettings||{})},
   }));
   const TODOS_VIEW = '__todos__';
   const AI_VIEW = '__ai__';
+  const QUOTES_VIEW = '__quotes__';
   const [activeId,setActiveId]=useState(initialData.sections[0]?.id);
   const [activeSubId,setActiveSubId]=useState(null);
   const [search,setSearch]=useState('');
@@ -2113,6 +2636,8 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const [cloudConnected,setCloudConnected]=useState(hasGithubSettings());
   const lastActivityRef=useRef(Date.now());
   const skipNextSaveRef=useRef(false);
+  const [editingQuote,setEditingQuote]=useState(null);
+  const [previewQuote,setPreviewQuote]=useState(null);
 
   useEffect(()=>{
     if(skipNextSaveRef.current){skipNextSaveRef.current=false;return;}
@@ -2218,6 +2743,16 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
               {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
             </button>
           );})()}
+          {/* Angebote */}
+          {(()=>{const isActive=activeId===QUOTES_VIEW;const count=(state.quotes||[]).length;const open=(state.quotes||[]).filter(q=>q.status==='entwurf'||q.status==='gesendet').length;return(
+            <button onClick={()=>setActiveId(QUOTES_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
+              onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,.05)';}}
+              onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:13,width:18,textAlign:'center',flexShrink:0,opacity:isActive?1:.5}}><Icons.Quote/></span>
+              <span style={{flex:1,fontSize:13.5,fontWeight:isActive?600:400,color:isActive?'white':'rgba(255,255,255,.5)',textAlign:'left',letterSpacing:'-0.01em'}}>Angebote</span>
+              {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
+            </button>
+          );})()}
           {state.sections.map(s=>{
             const count=state.contacts.filter(c=>c.sectionId===s.id).length;
             const isActive=s.id===activeId;
@@ -2286,6 +2821,30 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             )}
           </div>
           <AIEmployeesView employees={state.aiEmployees||[]} onUpdate={aiEmployees=>upd({aiEmployees})} externalNewTrigger={modal==='addAI'} onExternalNewHandled={()=>setModal(null)}/>
+        </>) : activeId === QUOTES_VIEW ? (<>
+          <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+            <div style={{flex:1}}>
+              <h1 style={{fontSize:18,fontWeight:800,letterSpacing:'-0.02em'}}>Angebote</h1>
+              <div style={{fontSize:12,color:'#B0ABA5',marginTop:2,display:'flex',gap:12,alignItems:'center'}}>
+                <span>{(state.quotes||[]).length} {(state.quotes||[]).length===1?'Angebot':'Angebote'}</span>
+                {(state.quotes||[]).filter(q=>q.status==='entwurf').length>0&&<span>· {(state.quotes||[]).filter(q=>q.status==='entwurf').length} Entwurf</span>}
+                {(state.quotes||[]).filter(q=>q.status==='gesendet').length>0&&<span>· {(state.quotes||[]).filter(q=>q.status==='gesendet').length} gesendet</span>}
+              </div>
+            </div>
+          </div>
+          <QuotesView
+            quotes={state.quotes||[]}
+            contacts={state.contacts}
+            settings={state.quoteSettings}
+            onCreate={(contact)=>{
+              const q = blankQuote(contact, state.quoteSettings);
+              setEditingQuote(q);
+              upd({quoteSettings:{...state.quoteSettings, quoteCounter:(state.quoteSettings.quoteCounter||1)+1}});
+            }}
+            onOpen={(q)=>setEditingQuote(q)}
+            onDelete={(id)=>upd({quotes:(state.quotes||[]).filter(q=>q.id!==id)})}
+            onSettings={()=>setModal('quoteSettings')}
+          />
         </>) : (<>
         <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
           <div style={{flex:1}}>
@@ -2359,7 +2918,38 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       onCleared={()=>{setCloudConnected(false);setModal(null);}}
       onClose={()=>setModal(null)}
     />}
-    {modal==='detail'&&selected&&<ContactDetail contact={selected} sections={state.sections} onClose={()=>setModal(null)} onEdit={()=>setModal('edit')} onUpdate={u2=>{upd({contacts:state.contacts.map(c=>c.id===u2.id?u2:c)});setSelected(u2);}}/>}
+    {modal==='detail'&&selected&&<ContactDetail contact={selected} sections={state.sections} quotes={state.quotes||[]} settings={state.quoteSettings} onClose={()=>setModal(null)} onEdit={()=>setModal('edit')} onUpdate={u2=>{upd({contacts:state.contacts.map(c=>c.id===u2.id?u2:c)});setSelected(u2);}}
+      onCreateQuote={()=>{
+        const q = blankQuote(selected, state.quoteSettings);
+        setEditingQuote(q);
+        upd({quoteSettings:{...state.quoteSettings, quoteCounter:(state.quoteSettings.quoteCounter||1)+1}});
+        setModal(null);
+      }}
+      onOpenQuote={(q)=>{setEditingQuote(q);setModal(null);}}
+    />}
+    {modal==='quoteSettings'&&<QuoteSettingsModal settings={state.quoteSettings} onSave={s=>upd({quoteSettings:s})} onClose={()=>setModal(null)}/>}
+    {editingQuote && <QuoteEditor
+      quote={editingQuote}
+      contacts={state.contacts}
+      settings={state.quoteSettings}
+      onSave={(q)=>{
+        const exists = (state.quotes||[]).some(x=>x.id===q.id);
+        upd({quotes: exists ? state.quotes.map(x=>x.id===q.id?q:x) : [...(state.quotes||[]), q]});
+        setEditingQuote(null);
+      }}
+      onPreview={(q)=>{setEditingQuote(null);setPreviewQuote(q);}}
+      onClose={()=>setEditingQuote(null)}
+    />}
+    {previewQuote && <QuotePreview
+      quote={previewQuote}
+      settings={state.quoteSettings}
+      onMarkSent={()=>{
+        const updated = {...previewQuote, status:'gesendet', sentAt:new Date().toISOString()};
+        upd({quotes:(state.quotes||[]).map(q=>q.id===updated.id?updated:q)});
+        setPreviewQuote(updated);
+      }}
+      onClose={()=>setPreviewQuote(null)}
+    />}
   </>);
 }
 
