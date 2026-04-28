@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
@@ -388,6 +388,11 @@ async function getOrCreateDeviceKey() {
   localStorage.setItem(DEVICE_KEY_STORE, toB64(exp));
   return key;
 }
+async function storeKeyForDevice(cryptoKey) {
+  const dk = await getOrCreateDeviceKey();
+  const rawKey = await crypto.subtle.exportKey('raw', cryptoKey);
+  localStorage.setItem(PKEY_ENC_STORE, JSON.stringify(await aesEncrypt(dk, toB64(rawKey))));
+}
 async function storeTOTPAndKeyForDevice(totpSecret, cryptoKey) {
   const dk = await getOrCreateDeviceKey();
   localStorage.setItem(TOTP_ENC_STORE, JSON.stringify(await aesEncrypt(dk, totpSecret)));
@@ -758,6 +763,8 @@ function AuthScreen({mode, onDone, onReset, onSwitchMode, prefilledInvite}) {
       const key = await verifyPassword(pw);
       if (!key) { doShake('Falsches Passwort.'); setBusy(false); return; }
       const data = await loadEncrypted(key);
+      // Store key for device auto-login (always, with or without TOTP)
+      try { await storeKeyForDevice(key); } catch(e) {}
       // Refresh device-key store if TOTP exists (so TOTP-only login stays available)
       if (hasTOTP()) {
         try {
@@ -3081,7 +3088,24 @@ function AuthWrapper(){
       const inv = params.get('invite');
       if(inv) setPrefilledInvite(inv.trim());
     }catch(e){}
-    setPhase(hasSetup()?'login':'setup');
+    // Try auto-login with stored device key (no password needed on same device)
+    (async()=>{
+      if(hasSetup() && localStorage.getItem(PKEY_ENC_STORE)){
+        try{
+          const dk = await getOrCreateDeviceKey();
+          const b64key = await aesDecrypt(dk, JSON.parse(localStorage.getItem(PKEY_ENC_STORE)));
+          const key = await crypto.subtle.importKey('raw',fromB64(b64key),{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+          let data = await loadEncrypted(key);
+          if(key && data){
+            if(hasGithubSettings()){
+              try{ await loadGithubSettings(key); const fresh=await loadEncrypted(key); if(fresh) data=fresh; }catch(e){}
+            }
+            setCryptoKey(key); setCrmData(data); setPhase('app'); return;
+          }
+        }catch(e){}
+      }
+      setPhase(hasSetup()?'login':'setup');
+    })();
   },[]);
 
   const handleReset=()=>{
@@ -3093,6 +3117,7 @@ function AuthWrapper(){
 
   const handleLogout=()=>{
     clearGithubSettings();
+    localStorage.removeItem(PKEY_ENC_STORE);
     setCryptoKey(null);
     setCrmData(null);
     setPhase('login');
@@ -3127,3 +3152,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<AuthWrapper/>);
 </script>
 </body>
 </html>
+
