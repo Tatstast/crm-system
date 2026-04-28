@@ -62,21 +62,13 @@
   .spinner{width:20px;height:20px;border:2px solid rgba(0,0,0,.15);border-top-color:#0F0E0C;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
   .totp-input{font-size:28px!important;letter-spacing:10px!important;text-align:center!important;font-weight:700!important;padding:16px!important;font-variant-numeric:tabular-nums!important;}
 
-  /* ── PRINT VIEW (Quotes) ── */
-  .quote-print-page{background:#F0EDE8;padding:40px 20px;min-height:100vh;}
-  .quote-paper{background:white;width:210mm;min-height:297mm;margin:0 auto;padding:24mm 20mm;box-shadow:0 8px 24px rgba(0,0,0,0.1);font-size:10.5pt;color:#141210;line-height:1.55;}
-  .quote-paper h1{font-size:22pt;font-weight:800;letter-spacing:-0.02em;}
-  .quote-paper h2{font-size:14pt;font-weight:700;letter-spacing:-0.01em;}
-  .quote-paper table{width:100%;border-collapse:collapse;margin:14pt 0;}
-  .quote-paper th,.quote-paper td{padding:8pt 10pt;text-align:left;font-size:10pt;}
-  .quote-paper th{border-bottom:1.5pt solid #141210;font-weight:700;font-size:9pt;text-transform:uppercase;letter-spacing:0.04em;}
-  .quote-paper tbody tr{border-bottom:0.5pt solid #E0DCD7;}
-  .quote-paper tbody tr:last-child{border-bottom:none;}
-  .quote-paper .num{text-align:right;font-variant-numeric:tabular-nums;}
+  /* ── PRINT VIEW (Quotes / Angebote) ── */
+  .quote-print-page{background:#E8E4DF;padding:40px 20px;min-height:100vh;}
+  .quote-paper{background:white;width:210mm;min-height:297mm;margin:0 auto;padding:22mm 20mm;box-shadow:0 12px 40px rgba(0,0,0,0.12);font-family:'Plus Jakarta Sans',sans-serif;font-size:10.5pt;color:#141210;line-height:1.55;}
   @media print{
     body{background:white!important;}
     .quote-print-page{background:white!important;padding:0!important;}
-    .quote-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:18mm 16mm!important;min-height:auto!important;}
+    .quote-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:16mm 14mm!important;min-height:auto!important;}
     .quote-no-print{display:none!important;}
     @page{size:A4;margin:0;}
   }
@@ -507,9 +499,11 @@ const DEFAULT_QUOTE_SETTINGS = {
   iban:'',
   bic:'',
   bankName:'',
-  defaultIntro:'Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihr Interesse. Hiermit übersenden wir Ihnen unser Angebot wie folgt:',
-  defaultTerms:'Zahlungsziel: 14 Tage netto.\nDieses Angebot ist 30 Tage gültig.\nAlle Preise verstehen sich in Euro.',
-  defaultFooter:'Mit freundlichen Grüßen',
+  defaultIntro:'vielen Dank für das angenehme Gespräch und Ihr Interesse an einer Zusammenarbeit. Auf Basis Ihrer Anforderungen haben wir folgendes Angebot für Sie zusammengestellt.',
+  defaultTerms:'Dieses Angebot ist 30 Tage gültig.\nZahlung 14 Tage netto.\nAlle Preise zzgl. der gesetzlichen USt.',
+  defaultFooter:'Wir freuen uns auf eine erfolgreiche Zusammenarbeit.',
+  defaultNextSteps:'1. Sie geben uns Bescheid, ob das Angebot passt — gerne auch mit Anpassungswünschen.\n2. Nach Ihrer Zusage starten wir mit dem Kick-off-Gespräch.\n3. Wir senden Ihnen einen detaillierten Projektplan und legen los.',
+  accentColor:'#141210',
   taxRate:20,
   currency:'EUR',
   quoteCounter:1,
@@ -1986,12 +1980,13 @@ function blankQuote(contact, settings) {
     date: new Date().toISOString().slice(0,10),
     validUntil: new Date(Date.now()+30*86400000).toISOString().slice(0,10),
     intro: settings.defaultIntro,
-    items: [{id:uid(),description:'',quantity:1,unitPrice:0}],
+    items: [{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],
     taxRate: settings.taxRate || 20,
     discount: 0,
     notes: '',
     terms: settings.defaultTerms,
     footer: settings.defaultFooter,
+    nextSteps: settings.defaultNextSteps || '',
     status: 'entwurf',
     sentAt: null,
     createdAt: new Date().toISOString(),
@@ -1999,7 +1994,7 @@ function blankQuote(contact, settings) {
 }
 
 function quoteTotals(quote) {
-  const subtotal = (quote.items||[]).reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitPrice)||0), 0);
+  const subtotal = (quote.items||[]).filter(i=>i.type!=='heading').reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitPrice)||0), 0);
   const discount = Number(quote.discount)||0;
   const afterDiscount = Math.max(0, subtotal - discount);
   const tax = afterDiscount * (Number(quote.taxRate)||0) / 100;
@@ -2042,9 +2037,20 @@ function QuoteSettingsModal({settings, onSave, onClose}){
         <input value={s.iban} onChange={e=>u('iban',e.target.value)} placeholder="IBAN" style={{marginBottom:18,fontFamily:'monospace'}}/>
 
         <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standardtexte</div>
-        <textarea value={s.defaultIntro} onChange={e=>u('defaultIntro',e.target.value)} placeholder="Anrede / Einleitung" style={{minHeight:70,marginBottom:10}}/>
-        <textarea value={s.defaultTerms} onChange={e=>u('defaultTerms',e.target.value)} placeholder="Bedingungen" style={{minHeight:70,marginBottom:10}}/>
-        <input value={s.defaultFooter} onChange={e=>u('defaultFooter',e.target.value)} placeholder="Grußformel (z.B. Mit freundlichen Grüßen)" style={{marginBottom:18}}/>
+        <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Einleitung (nach „Sehr geehrte/r …,")</div>
+        <textarea value={s.defaultIntro} onChange={e=>u('defaultIntro',e.target.value)} placeholder="z.B. vielen Dank für das Gespräch …" style={{minHeight:70,marginBottom:10}}/>
+        <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Nächste Schritte</div>
+        <textarea value={s.defaultNextSteps} onChange={e=>u('defaultNextSteps',e.target.value)} placeholder="z.B. So geht's nach Ihrer Zusage weiter …" style={{minHeight:70,marginBottom:10}}/>
+        <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Bedingungen</div>
+        <textarea value={s.defaultTerms} onChange={e=>u('defaultTerms',e.target.value)} placeholder="Gültigkeit, Zahlungsziel …" style={{minHeight:70,marginBottom:10}}/>
+        <input value={s.defaultFooter} onChange={e=>u('defaultFooter',e.target.value)} placeholder="Schluss-Satz (z.B. Wir freuen uns auf …)" style={{marginBottom:18}}/>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Design</div>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
+          <div style={{fontSize:12.5,color:'#6B6560',flex:1}}>Akzent-Farbe (Titel + Linien im Angebot)</div>
+          <input type="color" value={s.accentColor||'#141210'} onChange={e=>u('accentColor',e.target.value)} style={{width:48,height:36,padding:2,cursor:'pointer'}}/>
+          <input value={s.accentColor||'#141210'} onChange={e=>u('accentColor',e.target.value)} style={{width:100,fontFamily:'monospace',fontSize:12}}/>
+        </div>
 
         <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standard-Werte</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:18}}>
@@ -2083,8 +2089,20 @@ function QuoteEditor({quote, contacts, settings, onSave, onClose, onPreview}){
   const updateItem = (id, field, value) => {
     setQ(p=>({...p, items:p.items.map(it=>it.id===id?{...it,[field]:value}:it)}));
   };
-  const addItem = () => setQ(p=>({...p,items:[...p.items,{id:uid(),description:'',quantity:1,unitPrice:0}]}));
+  const addItem = () => setQ(p=>({...p,items:[...p.items,{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}]}));
+  const addHeading = () => setQ(p=>({...p,items:[...p.items,{id:uid(),type:'heading',description:''}]}));
   const removeItem = (id) => setQ(p=>({...p,items:p.items.filter(it=>it.id!==id)}));
+  const moveItem = (id, dir) => {
+    setQ(p=>{
+      const idx = p.items.findIndex(i=>i.id===id);
+      if(idx<0) return p;
+      const target = idx+dir;
+      if(target<0 || target>=p.items.length) return p;
+      const items = [...p.items];
+      [items[idx], items[target]] = [items[target], items[idx]];
+      return {...p, items};
+    });
+  };
 
   const updContact = (k,v) => setQ(p=>({...p, contactSnapshot:{...p.contactSnapshot,[k]:v}}));
 
@@ -2125,22 +2143,37 @@ function QuoteEditor({quote, contacts, settings, onSave, onClose, onPreview}){
         <textarea value={q.intro} onChange={e=>u('intro',e.target.value)} style={{minHeight:60,marginBottom:18}}/>
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em'}}>Positionen</div>
-          <button className="btn btn-ghost btn-sm" onClick={addItem}><Icons.Plus/>Position</button>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em'}}>Leistungen</div>
+          <div style={{display:'flex',gap:6}}>
+            <button className="btn btn-ghost btn-sm" onClick={addHeading}><Icons.Plus/>Phase / Überschrift</button>
+            <button className="btn btn-ghost btn-sm" onClick={addItem}><Icons.Plus/>Leistung</button>
+          </div>
         </div>
         <div style={{border:'1px solid #EAE6E0',borderRadius:10,overflow:'hidden',marginBottom:14}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 110px 32px',gap:8,padding:'8px 12px',background:'#FAFAF8',fontSize:10.5,fontWeight:700,color:'#6B6560',textTransform:'uppercase',letterSpacing:'0.05em'}}>
-            <div>Beschreibung</div><div style={{textAlign:'right'}}>Menge</div><div style={{textAlign:'right'}}>Einzelpreis</div><div style={{textAlign:'right'}}>Summe</div><div></div>
-          </div>
-          {q.items.map(it=>{
+          {q.items.map((it,idx)=>{
+            if (it.type === 'heading') {
+              return(
+                <div key={it.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:idx>0?'1px solid #F0EDE8':'none',background:'#FAFAF8'}}>
+                  <span style={{fontSize:10,fontWeight:700,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.08em',padding:'3px 8px',background:'#EAE6E0',borderRadius:6}}>Phase</span>
+                  <input value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="z.B. Phase 1: Konzept &amp; Design" style={{flex:1,padding:'6px 10px',fontSize:13.5,fontWeight:700,background:'white'}}/>
+                  <button onClick={()=>moveItem(it.id,-1)} disabled={idx===0} style={{background:'none',border:'none',color:'#C8C3BD',cursor:'pointer',padding:'2px 4px',fontSize:13,opacity:idx===0?0.3:1}}>↑</button>
+                  <button onClick={()=>moveItem(it.id,1)} disabled={idx===q.items.length-1} style={{background:'none',border:'none',color:'#C8C3BD',cursor:'pointer',padding:'2px 4px',fontSize:13,opacity:idx===q.items.length-1?0.3:1}}>↓</button>
+                  <button onClick={()=>removeItem(it.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:18,padding:'2px 4px',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+                </div>
+              );
+            }
             const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
             return(
-              <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 110px 32px',gap:8,padding:'8px 12px',borderTop:'1px solid #F0EDE8',alignItems:'flex-start'}}>
-                <textarea value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="Beschreibung der Leistung…" style={{minHeight:38,padding:'6px 8px',fontSize:12.5,resize:'vertical'}}/>
+              <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 70px 100px 100px 56px',gap:8,padding:'8px 12px',borderTop:idx>0?'1px solid #F0EDE8':'none',alignItems:'flex-start'}}>
+                <textarea value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="Was wird geliefert? Mehrere Zeilen ok." style={{minHeight:42,padding:'6px 8px',fontSize:12.5,resize:'vertical'}}/>
                 <input type="number" step="0.01" value={it.quantity} onChange={e=>updateItem(it.id,'quantity',e.target.value)} style={{padding:'6px 8px',fontSize:12.5,textAlign:'right'}}/>
                 <input type="number" step="0.01" value={it.unitPrice} onChange={e=>updateItem(it.id,'unitPrice',e.target.value)} style={{padding:'6px 8px',fontSize:12.5,textAlign:'right'}}/>
                 <div style={{padding:'8px 8px',fontSize:13,fontWeight:600,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtMoney(lineTotal,cur)}</div>
-                <button onClick={()=>removeItem(it.id)} disabled={q.items.length<=1} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:18,padding:'4px 4px 0',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+                <div style={{display:'flex',alignItems:'flex-start',gap:0}}>
+                  <button onClick={()=>moveItem(it.id,-1)} disabled={idx===0} style={{background:'none',border:'none',color:'#C8C3BD',cursor:'pointer',padding:'2px 3px',fontSize:13,opacity:idx===0?0.3:1}}>↑</button>
+                  <button onClick={()=>moveItem(it.id,1)} disabled={idx===q.items.length-1} style={{background:'none',border:'none',color:'#C8C3BD',cursor:'pointer',padding:'2px 3px',fontSize:13,opacity:idx===q.items.length-1?0.3:1}}>↓</button>
+                  <button onClick={()=>removeItem(it.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,padding:'2px 3px',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+                </div>
               </div>
             );
           })}
@@ -2169,7 +2202,10 @@ function QuoteEditor({quote, contacts, settings, onSave, onClose, onPreview}){
           </div>
         </div>
 
-        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Bedingungen / Hinweise</div>
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>So geht's weiter</div>
+        <textarea value={q.nextSteps||''} onChange={e=>u('nextSteps',e.target.value)} placeholder="Was passiert nach Zusage? z.B. Kick-off, Briefing, Start" style={{minHeight:70,marginBottom:18}}/>
+
+        <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Bedingungen / Kleingedrucktes</div>
         <textarea value={q.terms} onChange={e=>u('terms',e.target.value)} style={{minHeight:60,marginBottom:18}}/>
 
         <div style={{display:'flex',gap:10,justifyContent:'space-between',paddingTop:14,borderTop:'1px solid #EAE6E0'}}>
@@ -2184,12 +2220,27 @@ function QuoteEditor({quote, contacts, settings, onSave, onClose, onPreview}){
   );
 }
 
-// ── Quote Preview / Print View ───────────────────────────────────
+// ── Quote Preview / Print View (Pitch-style) ─────────────────────
 function QuotePreview({quote, settings, onClose, onMarkSent}){
   const totals = quoteTotals(quote);
   const cur = settings.currency || 'EUR';
+  const accent = settings.accentColor || '#141210';
   const fmtD = iso => iso ? new Date(iso).toLocaleDateString('de-AT',{day:'2-digit',month:'long',year:'numeric'}) : '';
   const status = QUOTE_STATUSES.find(s=>s.key===quote.status) || QUOTE_STATUSES[0];
+  const greeting = quote.contactSnapshot?.ansprechpartner ? `Sehr geehrte/r ${quote.contactSnapshot.ansprechpartner},` : 'Sehr geehrte Damen und Herren,';
+
+  // Group items by heading for sectioned display
+  const sections = [];
+  let current = {heading:null, items:[]};
+  (quote.items||[]).forEach(it=>{
+    if (it.type === 'heading') {
+      if (current.items.length || current.heading) sections.push(current);
+      current = {heading:it.description, items:[]};
+    } else {
+      current.items.push(it);
+    }
+  });
+  if (current.items.length || current.heading) sections.push(current);
 
   const handlePrint = () => { window.print(); };
   const handleEmail = () => {
@@ -2197,12 +2248,12 @@ function QuotePreview({quote, settings, onClose, onMarkSent}){
     const subject = `Angebot ${quote.number}${quote.title?' — '+quote.title:''}`;
     const body = `${c.ansprechpartner?'Sehr geehrte/r '+c.ansprechpartner+',':'Sehr geehrte Damen und Herren,'}
 
-anbei übersenden wir Ihnen unser Angebot ${quote.number}${quote.title?' für '+quote.title:''}.
+anbei finden Sie unser Angebot ${quote.number}${quote.title?' für '+quote.title:''}.
 
-Gesamtbetrag: ${fmtMoney(totals.total,cur)}
+Gesamtinvestition: ${fmtMoney(totals.total,cur)}
 Gültig bis: ${fmtD(quote.validUntil)}
 
-Bei Fragen stehe ich gerne zur Verfügung.
+Wir freuen uns auf Ihre Rückmeldung.
 
 ${settings.defaultFooter || 'Mit freundlichen Grüßen'}
 ${settings.companyName || ''}`;
@@ -2214,9 +2265,12 @@ ${settings.companyName || ''}`;
   return(
     <div className="quote-print-page" style={{position:'fixed',inset:0,zIndex:1000,overflow:'auto'}}>
       {/* Floating action bar */}
-      <div className="quote-no-print" style={{position:'sticky',top:0,zIndex:10,background:'rgba(15,14,12,0.92)',backdropFilter:'blur(8px)',padding:'12px 20px',display:'flex',gap:10,alignItems:'center',justifyContent:'center',marginBottom:20,marginLeft:-20,marginRight:-20,marginTop:-40,boxShadow:'0 4px 20px rgba(0,0,0,0.2)'}}>
-        <div style={{color:'rgba(255,255,255,0.5)',fontSize:12.5,marginRight:'auto'}}>
-          Angebot {quote.number} · <span style={{color:status.color,fontWeight:600,padding:'2px 7px',background:'rgba(255,255,255,0.1)',borderRadius:99,fontSize:11}}>{status.label}</span>
+      <div className="quote-no-print" style={{position:'sticky',top:0,zIndex:10,background:'rgba(15,14,12,0.92)',backdropFilter:'blur(8px)',padding:'12px 20px',display:'flex',gap:10,alignItems:'center',marginLeft:-20,marginRight:-20,marginTop:-40,marginBottom:24,boxShadow:'0 4px 20px rgba(0,0,0,0.2)'}}>
+        <div style={{color:'rgba(255,255,255,0.5)',fontSize:12.5,marginRight:'auto',display:'flex',alignItems:'center',gap:10}}>
+          <span>Vorschau</span>
+          <span style={{color:'rgba(255,255,255,0.3)'}}>·</span>
+          <span style={{color:'white',fontFamily:'monospace'}}>{quote.number}</span>
+          <span style={{color:status.color,fontWeight:600,padding:'2px 8px',background:'rgba(255,255,255,0.1)',borderRadius:99,fontSize:11}}>{status.label}</span>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={handleEmail} style={{color:'white',borderColor:'rgba(255,255,255,0.2)'}}><Icons.Mail/>Per Email senden</button>
         <button className="btn btn-primary btn-sm" onClick={handlePrint}><Icons.Print/>Drucken / PDF</button>
@@ -2224,97 +2278,155 @@ ${settings.companyName || ''}`;
       </div>
 
       <div className="quote-paper">
-        {/* Header */}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12mm'}}>
-          <div>
-            <div style={{fontWeight:800,fontSize:'14pt',letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
-            {settings.companyAddress && <div style={{fontSize:'9pt',color:'#555',whiteSpace:'pre-line',marginTop:'2mm',lineHeight:1.5}}>{settings.companyAddress}</div>}
-            <div style={{fontSize:'9pt',color:'#555',marginTop:'2mm'}}>
-              {[settings.companyEmail,settings.companyPhone,settings.companyWebsite].filter(Boolean).join(' · ')}
+        {/* === COVER === */}
+        <div style={{minHeight:'240mm',display:'flex',flexDirection:'column'}}>
+          {/* Top: small label + company name */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'30mm'}}>
+            <div>
+              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:600,marginBottom:'1mm'}}>Angebot</div>
+              <div style={{fontSize:'9pt',color:'#3F3A35',fontFamily:'monospace',letterSpacing:'0.05em'}}>{quote.number}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontWeight:700,fontSize:'12pt',color:accent,letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
+              {settings.companyWebsite && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1mm'}}>{settings.companyWebsite}</div>}
             </div>
           </div>
-          <div style={{textAlign:'right'}}>
-            <h1 style={{fontSize:'20pt',fontWeight:800,marginBottom:'2mm'}}>ANGEBOT</h1>
-            <div style={{fontSize:'10pt',color:'#555'}}>Nr. {quote.number}</div>
-            <div style={{fontSize:'10pt',color:'#555'}}>Datum: {fmtD(quote.date)}</div>
-            <div style={{fontSize:'10pt',color:'#555'}}>Gültig bis: {fmtD(quote.validUntil)}</div>
+
+          {/* Hero */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+            <div style={{fontSize:'9pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,marginBottom:'4mm'}}>Für</div>
+            <h1 style={{fontSize:'28pt',fontWeight:800,color:accent,letterSpacing:'-0.025em',lineHeight:1.05,marginBottom:'10mm'}}>{quote.contactSnapshot.firma || '—'}</h1>
+            {quote.title && (
+              <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'6mm',maxWidth:'90%'}}>
+                <div style={{fontSize:'9pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,marginBottom:'3mm'}}>Projekt</div>
+                <div style={{fontSize:'17pt',fontWeight:700,color:'#141210',lineHeight:1.25,letterSpacing:'-0.01em'}}>{quote.title}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom meta */}
+          <div style={{display:'flex',gap:'16mm',marginTop:'30mm',paddingTop:'8mm',borderTop:'0.5pt solid #E5E1DC'}}>
+            <div>
+              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Datum</div>
+              <div style={{fontSize:'10pt',fontWeight:600}}>{fmtD(quote.date)}</div>
+            </div>
+            <div>
+              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Gültig bis</div>
+              <div style={{fontSize:'10pt',fontWeight:600}}>{fmtD(quote.validUntil)}</div>
+            </div>
+            <div style={{flex:1,textAlign:'right'}}>
+              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Investition</div>
+              <div style={{fontSize:'13pt',fontWeight:800,color:accent,fontVariantNumeric:'tabular-nums',letterSpacing:'-0.01em'}}>{fmtMoney(totals.total,cur)}</div>
+            </div>
           </div>
         </div>
 
-        {/* Customer */}
-        <div style={{marginBottom:'10mm'}}>
-          <div style={{fontSize:'8pt',color:'#888',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'2mm'}}>An</div>
-          <div style={{fontSize:'10pt',fontWeight:600}}>{quote.contactSnapshot.firma}</div>
-          {quote.contactSnapshot.ansprechpartner && <div style={{fontSize:'10pt'}}>z.Hd. {quote.contactSnapshot.ansprechpartner}</div>}
-          {quote.contactSnapshot.adresse && <div style={{fontSize:'10pt',whiteSpace:'pre-line',color:'#333'}}>{quote.contactSnapshot.adresse}</div>}
+        {/* Page break for print */}
+        <div style={{pageBreakAfter:'always'}}></div>
+
+        {/* === GREETING + INTRO === */}
+        <div style={{marginTop:'8mm',marginBottom:'14mm'}}>
+          <div style={{fontSize:'10.5pt',marginBottom:'5mm',fontWeight:500}}>{greeting}</div>
+          {quote.intro && <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.7,color:'#2F2A25'}}>{quote.intro}</div>}
         </div>
 
-        {/* Title */}
-        {quote.title && <h2 style={{fontSize:'13pt',fontWeight:700,marginBottom:'4mm'}}>{quote.title}</h2>}
+        {/* === LEISTUNGEN (Sectioned) === */}
+        <div style={{marginBottom:'14mm'}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'8mm'}}>
+            <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>01</span>
+            <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Was wir leisten</h2>
+          </div>
+          {sections.map((section, sIdx) => (
+            <div key={sIdx} style={{marginBottom:'8mm'}}>
+              {section.heading && (
+                <div style={{fontSize:'11pt',fontWeight:700,color:'#141210',marginBottom:'3mm',paddingBottom:'1.5mm',borderBottom:`1pt solid ${accent}`,letterSpacing:'-0.005em'}}>{section.heading}</div>
+              )}
+              {section.items.map((it, idx) => {
+                const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
+                return(
+                  <div key={it.id} style={{display:'flex',gap:'6mm',padding:'4mm 0',borderTop:idx>0?'0.4pt solid #EFEBE6':'none',alignItems:'flex-start'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',color:'#1F1B17',lineHeight:1.55,fontWeight:500}}>{it.description}</div>
+                      {Number(it.quantity) > 1 && (
+                        <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1mm'}}>{it.quantity} × {fmtMoney(it.unitPrice,cur)}</div>
+                      )}
+                    </div>
+                    <div style={{fontSize:'10.5pt',fontWeight:600,fontVariantNumeric:'tabular-nums',color:'#1F1B17',whiteSpace:'nowrap',minWidth:'30mm',textAlign:'right'}}>{fmtMoney(lineTotal,cur)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
 
-        {/* Intro */}
-        {quote.intro && <div style={{fontSize:'10pt',whiteSpace:'pre-line',marginBottom:'8mm',lineHeight:1.6}}>{quote.intro}</div>}
-
-        {/* Items table */}
-        <table>
-          <thead>
-            <tr>
-              <th style={{width:'52%'}}>Beschreibung</th>
-              <th className="num" style={{width:'12%'}}>Menge</th>
-              <th className="num" style={{width:'18%'}}>Einzelpreis</th>
-              <th className="num" style={{width:'18%'}}>Gesamt</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quote.items.map(it=>{
-              const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
-              return(
-                <tr key={it.id}>
-                  <td style={{whiteSpace:'pre-line'}}>{it.description}</td>
-                  <td className="num">{it.quantity}</td>
-                  <td className="num">{fmtMoney(it.unitPrice,cur)}</td>
-                  <td className="num">{fmtMoney(lineTotal,cur)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        {/* Totals */}
-        <div style={{display:'flex',justifyContent:'flex-end',marginTop:'4mm'}}>
-          <div style={{minWidth:'70mm'}}>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>Zwischensumme</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.subtotal,cur)}</span></div>
-            {totals.discount>0 && <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>Rabatt</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>−{fmtMoney(totals.discount,cur)}</span></div>}
-            <div style={{display:'flex',justifyContent:'space-between',padding:'2mm 0',fontSize:'10pt'}}><span>USt {quote.taxRate}%</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.tax,cur)}</span></div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'3mm 0',fontSize:'12pt',fontWeight:800,borderTop:'1.5pt solid #141210',marginTop:'2mm'}}><span>Gesamt</span><span className="num" style={{fontVariantNumeric:'tabular-nums'}}>{fmtMoney(totals.total,cur)}</span></div>
+        {/* === INVESTITION (highlighted) === */}
+        <div style={{marginBottom:'14mm',padding:'8mm',background:'#FAF9F7',borderRadius:'2mm',borderLeft:`3pt solid ${accent}`}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'5mm'}}>
+            <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>02</span>
+            <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Investition</h2>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'2mm 6mm',fontSize:'10pt'}}>
+            <div style={{color:'#5F5A55'}}>Zwischensumme (netto)</div>
+            <div style={{fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{fmtMoney(totals.subtotal,cur)}</div>
+            {totals.discount>0 && <>
+              <div style={{color:'#5F5A55'}}>Rabatt</div>
+              <div style={{fontVariantNumeric:'tabular-nums',textAlign:'right'}}>−{fmtMoney(totals.discount,cur)}</div>
+            </>}
+            <div style={{color:'#5F5A55'}}>USt {quote.taxRate}%</div>
+            <div style={{fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{fmtMoney(totals.tax,cur)}</div>
+          </div>
+          <div style={{borderTop:`1.5pt solid ${accent}`,marginTop:'4mm',paddingTop:'4mm',display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+            <div style={{fontSize:'11pt',fontWeight:700,color:accent}}>Gesamt</div>
+            <div style={{fontSize:'18pt',fontWeight:800,fontVariantNumeric:'tabular-nums',color:accent,letterSpacing:'-0.02em'}}>{fmtMoney(totals.total,cur)}</div>
           </div>
         </div>
 
-        {/* Terms */}
+        {/* === NÄCHSTE SCHRITTE === */}
+        {quote.nextSteps && (
+          <div style={{marginBottom:'14mm'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'5mm'}}>
+              <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>03</span>
+              <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>So geht's weiter</h2>
+            </div>
+            <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.7,color:'#2F2A25'}}>{quote.nextSteps}</div>
+          </div>
+        )}
+
+        {/* === SCHLUSSWORTE === */}
+        <div style={{marginTop:'16mm',marginBottom:'10mm'}}>
+          <div style={{fontSize:'10.5pt',color:'#2F2A25',lineHeight:1.7,marginBottom:'8mm'}}>{quote.footer || settings.defaultFooter || 'Wir freuen uns auf Ihre Rückmeldung.'}</div>
+          <div style={{fontSize:'10.5pt',fontWeight:700,color:accent}}>{settings.companyName}</div>
+          {quote.contactSnapshot?.ansprechpartner && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1mm'}}>Ihr Ansprechpartner: {quote.contactSnapshot.ansprechpartner}</div>}
+        </div>
+
+        {/* === FOOTER (bedingungen + meta) === */}
         {quote.terms && (
-          <div style={{marginTop:'10mm',fontSize:'9pt',color:'#444',whiteSpace:'pre-line',lineHeight:1.6,borderTop:'0.5pt solid #DDD',paddingTop:'4mm'}}>
+          <div style={{marginTop:'14mm',padding:'4mm 5mm',background:'#FAFAF8',borderRadius:'1.5mm',fontSize:'8.5pt',color:'#5F5A55',whiteSpace:'pre-line',lineHeight:1.6}}>
             {quote.terms}
           </div>
         )}
 
-        {/* Footer */}
-        <div style={{marginTop:'12mm',fontSize:'10pt'}}>{quote.footer || 'Mit freundlichen Grüßen'}</div>
-        <div style={{marginTop:'2mm',fontSize:'10pt',fontWeight:600}}>{settings.companyName}</div>
-
-        {/* Bank */}
-        {(settings.iban || settings.bankName) && (
-          <div style={{marginTop:'14mm',paddingTop:'4mm',borderTop:'0.5pt solid #DDD',fontSize:'8.5pt',color:'#777',display:'flex',justifyContent:'space-between',gap:'10mm'}}>
-            <div>
-              {settings.companyName && <span>{settings.companyName} · </span>}
-              {settings.taxId && <span>UID: {settings.taxId}</span>}
-            </div>
-            <div style={{textAlign:'right'}}>
-              {settings.bankName && <div>{settings.bankName}</div>}
-              {settings.iban && <div style={{fontFamily:'monospace'}}>IBAN: {settings.iban}</div>}
-              {settings.bic && <div style={{fontFamily:'monospace'}}>BIC: {settings.bic}</div>}
-            </div>
+        {/* === COMPANY FOOTER STRIP === */}
+        <div style={{marginTop:'10mm',paddingTop:'4mm',borderTop:'0.5pt solid #E5E1DC',display:'flex',gap:'8mm',fontSize:'7.5pt',color:'#9A9590',lineHeight:1.5}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,color:'#5F5A55'}}>{settings.companyName}</div>
+            {settings.companyAddress && <div style={{whiteSpace:'pre-line'}}>{settings.companyAddress}</div>}
           </div>
-        )}
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'1mm'}}>Kontakt</div>
+            {settings.companyEmail && <div>{settings.companyEmail}</div>}
+            {settings.companyPhone && <div>{settings.companyPhone}</div>}
+            {settings.taxId && <div style={{marginTop:'1mm'}}>UID: {settings.taxId}</div>}
+          </div>
+          {(settings.iban || settings.bankName) && (
+            <div style={{flex:1}}>
+              <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'1mm'}}>Bankverbindung</div>
+              {settings.bankName && <div>{settings.bankName}</div>}
+              {settings.iban && <div style={{fontFamily:'monospace'}}>{settings.iban}</div>}
+              {settings.bic && <div style={{fontFamily:'monospace'}}>{settings.bic}</div>}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
