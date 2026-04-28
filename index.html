@@ -90,36 +90,44 @@ async function sha256b64(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return toB64(buf);
 }
-function loadInvites() {
-  try { return JSON.parse(localStorage.getItem(INVITES_KEY) || '[]'); } catch(e) { return []; }
-}
-function saveInvites(list) { localStorage.setItem(INVITES_KEY, JSON.stringify(list)); }
 
-async function createInvite(label) {
-  const code    = [...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(36).padStart(2,'0')).join('').toUpperCase().slice(0,16);
-  const grouped = code.match(/.{4}/g).join('-');   // XXXX-XXXX-XXXX-XXXX
-  const hash    = await sha256b64('WEBARS_INV_' + code.replace(/-/g,''));
-  const invites = loadInvites();
-  invites.push({ id: toB64(crypto.getRandomValues(new Uint8Array(6))), hash, label: label||'Einladung', created: new Date().toISOString(), used: false });
-  saveInvites(invites);
-  return grouped;
+// Invite token = base64url-encoded JSON containing master key + GitHub creds.
+// Sharing this token with a member gives them access to the same team data.
+async function createInviteToken(masterKey, ghSettings, label) {
+  const masterB64 = await exportMasterKeyB64(masterKey);
+  const payload = {
+    v: 1,
+    mk: masterB64,
+    gh: ghSettings || null,
+    label: label || '',
+    created: new Date().toISOString()
+  };
+  // base64url so it's URL-safe
+  return b64encode(JSON.stringify(payload)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
-async function validateAndUseInvite(code) {
-  const clean = code.replace(/[-\s]/g,'').toUpperCase();
-  const hash  = await sha256b64('WEBARS_INV_' + clean);
-  const invites = loadInvites();
-  const idx = invites.findIndex(i => i.hash === hash && !i.used);
-  if (idx === -1) return false;
-  invites[idx].used = true;
-  invites[idx].usedAt = new Date().toISOString();
-  saveInvites(invites);
-  return true;
+function parseInviteToken(token) {
+  try {
+    if (!token) return null;
+    let s = token.trim().replace(/-/g,'+').replace(/_/g,'/');
+    while (s.length % 4) s += '=';
+    const payload = JSON.parse(b64decode(s));
+    if (payload.v !== 1 || !payload.mk) return null;
+    return {
+      masterKeyB64: payload.mk,
+      ghSettings: payload.gh || null,
+      label: payload.label || '',
+      created: payload.created
+    };
+  } catch (e) { return null; }
 }
 
 // ─── AES helpers ────────────────────────────────────────────────
 const toB64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const fromB64 = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+// UTF-8 safe base64 for strings (used by invite tokens and GitHub blobs)
+const b64encode = str => btoa(unescape(encodeURIComponent(str)));
+const b64decode = b64 => decodeURIComponent(escape(atob(b64.replace(/\s/g,''))));
 
 async function deriveKey(password, salt) {
   const enc = new TextEncoder();
@@ -145,7 +153,7 @@ function getSalt() {
   localStorage.setItem(SALT_KEY, toB64(salt));
   return salt;
 }
-function hasSetup()  { return !!localStorage.getItem(VERIFY_KEY); }
+function hasSetup()  { return !!localStorage.getItem(VERIFY_KEY) && !!localStorage.getItem(MASTER_KEY_STORE); }
 function hasTOTP()   { return !!localStorage.getItem(TOTP_KEY); }
 
 async function storeEmailHash(email) {
@@ -159,19 +167,50 @@ async function checkEmailHash(email) {
   return hash === stored;
 }
 function hasEmailHash() { return !!localStorage.getItem(EMAIL_HASH_KEY); }
-async function setupPassword(password) {
-  const salt = getSalt();
-  const key  = await deriveKey(password, salt);
-  localStorage.setItem(VERIFY_KEY, JSON.stringify(await aesEncrypt(key, VERIFY_STR)));
-  return key;
+
+// ─── Master Key (shared team encryption key, wrapped per-user) ──
+const MASTER_KEY_STORE = 'webars_master_v1';
+
+async function generateMasterKey() {
+  return crypto.subtle.generateKey({name:'AES-GCM',length:256}, true, ['encrypt','decrypt']);
 }
+async function exportMasterKeyB64(masterKey) {
+  const raw = await crypto.subtle.exportKey('raw', masterKey);
+  return toB64(raw);
+}
+async function importMasterKeyFromB64(b64) {
+  return crypto.subtle.importKey('raw', fromB64(b64), {name:'AES-GCM'}, true, ['encrypt','decrypt']);
+}
+
+async function setupPassword(password, providedMasterKeyB64 = null) {
+  const salt = getSalt();
+  const wrapKey = await deriveKey(password, salt);
+  // Verify string encrypted with wrapping key
+  localStorage.setItem(VERIFY_KEY, JSON.stringify(await aesEncrypt(wrapKey, VERIFY_STR)));
+  // Master key: imported (member) or freshly generated (owner)
+  const masterKey = providedMasterKeyB64
+    ? await importMasterKeyFromB64(providedMasterKeyB64)
+    : await generateMasterKey();
+  const masterB64 = await exportMasterKeyB64(masterKey);
+  localStorage.setItem(MASTER_KEY_STORE, JSON.stringify(await aesEncrypt(wrapKey, masterB64)));
+  return masterKey; // master key is the actual encryption key for all data
+}
+
 async function verifyPassword(password) {
-  const salt  = getSalt();
-  const key   = await deriveKey(password, salt);
+  const salt = getSalt();
+  const wrapKey = await deriveKey(password, salt);
   try {
-    const v = await aesDecrypt(key, JSON.parse(localStorage.getItem(VERIFY_KEY)));
-    return v === VERIFY_STR ? key : null;
+    const v = await aesDecrypt(wrapKey, JSON.parse(localStorage.getItem(VERIFY_KEY)));
+    if (v !== VERIFY_STR) return null;
+    const mkRaw = localStorage.getItem(MASTER_KEY_STORE);
+    if (!mkRaw) return null;
+    const mkB64 = await aesDecrypt(wrapKey, JSON.parse(mkRaw));
+    return await importMasterKeyFromB64(mkB64);
   } catch(e) { return null; }
+}
+
+async function getMasterKeyB64(masterKey) {
+  return exportMasterKeyB64(masterKey);
 }
 async function saveTOTPSecret(key, secret) {
   localStorage.setItem(TOTP_KEY, JSON.stringify(await aesEncrypt(key, secret)));
@@ -251,14 +290,6 @@ function clearGithubSettings() {
   _ghSettings = null;
   _ghSha = null;
   _ghSyncState = {state:'idle'};
-}
-
-// UTF-8 safe base64
-function b64encode(str) {
-  return btoa(unescape(encodeURIComponent(str)));
-}
-function b64decode(b64) {
-  return decodeURIComponent(escape(atob(b64.replace(/\s/g,''))));
 }
 
 async function ghValidateAccess(token, repo) {
@@ -603,10 +634,11 @@ function AuthScreen({mode, onDone, onReset, prefilledInvite}) {
   const [derivedKey,     setDerivedKey]     = useState(null);
   const [totpSecret,     setTotpSecret]     = useState('');
   const [otpUrl,         setOtpUrl]         = useState('');
+  const [joinedViaInvite, setJoinedViaInvite] = useState(false);
 
   const doShake = msg => { setErr(msg); setShake(true); setTimeout(()=>setShake(false), 500); };
 
-  // ── SETUP STEP 0 (combined): Email + Invite + Password ────────
+  // ── SETUP STEP 0 (combined): Email + (optional invite token) + Password ────────
   const submitCombinedSetup = async () => {
     setErr('');
     const trimmed = email.trim().toLowerCase();
@@ -616,20 +648,36 @@ function AuthScreen({mode, onDone, onReset, prefilledInvite}) {
 
     setBusy(true);
     try {
-      // Invite check (only if not owner)
-      if (trimmed !== OWNER_EMAIL.toLowerCase()) {
-        if (!invite.trim()) { doShake('Du benötigst einen Einladungscode.'); setBusy(false); return; }
-        const valid = await validateAndUseInvite(invite.trim());
-        if (!valid) { doShake('Ungültiger oder bereits verwendeter Einladungscode.'); setBusy(false); return; }
+      let masterKeyB64 = null;
+      let importedGhSettings = null;
+
+      // If invite token provided, parse it
+      if (invite.trim()) {
+        const parsed = parseInviteToken(invite.trim());
+        if (!parsed) { doShake('Ungültiger Einladungs-Token.'); setBusy(false); return; }
+        masterKeyB64 = parsed.masterKeyB64;
+        importedGhSettings = parsed.ghSettings;
+      } else if (trimmed !== OWNER_EMAIL.toLowerCase()) {
+        doShake('Du benötigst einen Einladungs-Token vom Team-Owner.');
+        setBusy(false); return;
       }
+
       await storeEmailHash(trimmed);
-      const key    = await setupPassword(pw);
+      // setupPassword now generates (owner) or imports (member) the master key
+      const masterKey = await setupPassword(pw, masterKeyB64);
+
+      // If invite carried GitHub settings, store them encrypted with master key
+      if (importedGhSettings) {
+        await saveGithubSettings(masterKey, importedGhSettings);
+      }
+      if (masterKeyB64) setJoinedViaInvite(true);
+
       const secret = generateTOTPSecret();
-      setDerivedKey(key);
+      setDerivedKey(masterKey);
       setTotpSecret(secret);
       setOtpUrl(makeOTPAuthURL(secret, trimmed));
       setStep(1);
-    } catch(e) { setErr('Fehler. Bitte erneut versuchen.'); }
+    } catch(e) { console.error(e); setErr('Fehler. Bitte erneut versuchen.'); }
     setBusy(false);
   };
 
@@ -651,7 +699,8 @@ function AuthScreen({mode, onDone, onReset, prefilledInvite}) {
       const ok = await verifyTOTP(totpSecret, code);
       if (!ok) { doShake('Ungültiger Code – bitte erneut versuchen.'); setCode(''); setBusy(false); return; }
       await saveTOTPSecret(derivedKey, totpSecret);
-      await saveEncrypted(derivedKey, DEFAULT_STATE);
+      // Only seed initial state for owners; invited members fetch from cloud (don't overwrite team data!)
+      if (!joinedViaInvite) await saveEncrypted(derivedKey, DEFAULT_STATE);
       await storeTOTPAndKeyForDevice(totpSecret, derivedKey);
       onDone(derivedKey, DEFAULT_STATE);
     } catch(e) { setErr('Fehler. Bitte erneut versuchen.'); }
@@ -662,7 +711,7 @@ function AuthScreen({mode, onDone, onReset, prefilledInvite}) {
   const skipTOTPSetup = async () => {
     setErr(''); setBusy(true);
     try {
-      await saveEncrypted(derivedKey, DEFAULT_STATE);
+      if (!joinedViaInvite) await saveEncrypted(derivedKey, DEFAULT_STATE);
       onDone(derivedKey, DEFAULT_STATE);
     } catch(e) { setErr('Fehler. Bitte erneut versuchen.'); }
     setBusy(false);
@@ -761,11 +810,12 @@ function AuthScreen({mode, onDone, onReset, prefilledInvite}) {
             {needsInvite && (
               <div>
                 <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.25)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em',display:'flex',alignItems:'center',gap:6}}>
-                  Einladungscode
-                  {prefilledInvite && <span style={{color:'rgba(134,239,172,0.85)',textTransform:'none',letterSpacing:0,fontWeight:500,fontSize:10.5}}>· aus Einladungslink</span>}
+                  Einladungs-Token
+                  {prefilledInvite && <span style={{color:'rgba(134,239,172,0.85)',textTransform:'none',letterSpacing:0,fontWeight:500,fontSize:10.5}}>· aus Link</span>}
                 </div>
-                <input value={invite} onChange={e=>setInvite(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX" className="auth-input"
-                  style={{fontFamily:'monospace',letterSpacing:'2px'}} onKeyDown={e=>e.key==='Enter'&&submitCombinedSetup()}/>
+                <textarea value={invite} onChange={e=>setInvite(e.target.value)} placeholder="Token vom Team-Owner einfügen…" className="auth-input"
+                  style={{fontFamily:'monospace',fontSize:11.5,minHeight:62,wordBreak:'break-all',lineHeight:1.4}}/>
+                <div style={{fontSize:10.5,color:'rgba(255,255,255,0.3)',marginTop:5,lineHeight:1.5}}>Enthält Master-Schlüssel + Cloud-Sync-Zugang. Du wirst danach dein eigenes Passwort wählen.</div>
               </div>
             )}
             <div>
@@ -1064,126 +1114,105 @@ function GithubSyncModal({cryptoKey, currentSettings, onSaved, onClose, onCleare
             </button>
           </div>
         </div>
+
+        {isUpdate && (
+          <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid #F0EDE8',fontSize:11.5,color:'#A8A39D'}}>
+            Sync-Status: <span style={{fontWeight:600,color:getSyncState().state==='ok'?'#16a34a':getSyncState().state==='error'?'#C0392B':'#6B6560'}}>{getSyncState().state==='ok'?'OK · live':getSyncState().state==='error'?`Fehler: ${getSyncState().message||'unbekannt'}`:'wartet'}</span>
+            {getSyncState().at && <span> · zuletzt {new Date(getSyncState().at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function InviteManagerModal({onClose}) {
-  const [invites, setInvites] = useState(loadInvites());
-  const [label, setLabel]     = useState('');
-  const [newCode, setNewCode] = useState('');
-  const [busy, setBusy]       = useState(false);
-  const [copiedCode, setCopiedCode]   = useState(false);
+function InviteManagerModal({masterKey, onClose}) {
+  const [token, setToken]   = useState('');
+  const [busy, setBusy]     = useState(false);
   const [copiedLink, setCopiedLink]   = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [err, setErr]       = useState('');
+  const cloudReady = !!_ghSettings;
 
-  const buildInviteLink = (code) => {
+  const buildInviteLink = (tok) => {
     const base = window.location.origin + window.location.pathname.replace(/\/$/,'');
-    return `${base}/?invite=${encodeURIComponent(code)}`;
+    return `${base}/?invite=${encodeURIComponent(tok)}`;
   };
 
   const generate = async () => {
-    setBusy(true);
-    const code = await createInvite(label.trim() || 'Einladung');
-    setNewCode(code);
-    setLabel('');
-    setInvites(loadInvites());
+    setErr(''); setBusy(true);
+    try {
+      if (!_ghSettings) {
+        setErr('Cloud-Sync muss aktiv sein, bevor du jemanden einladen kannst. Klick links unten auf "Cloud-Sync".');
+        setBusy(false); return;
+      }
+      const tok = await createInviteToken(masterKey, _ghSettings);
+      setToken(tok);
+    } catch(e) { setErr('Fehler beim Erstellen.'); }
     setBusy(false);
   };
 
-  const copyCode = () => {
-    navigator.clipboard?.writeText(newCode).then(()=>{setCopiedCode(true);setTimeout(()=>setCopiedCode(false),2000);});
-  };
   const copyLink = () => {
-    navigator.clipboard?.writeText(buildInviteLink(newCode)).then(()=>{setCopiedLink(true);setTimeout(()=>setCopiedLink(false),2000);});
+    navigator.clipboard?.writeText(buildInviteLink(token)).then(()=>{setCopiedLink(true);setTimeout(()=>setCopiedLink(false),2000);});
   };
-
-  const deleteInvite = (id) => {
-    const updated = loadInvites().filter(i => i.id !== id);
-    saveInvites(updated);
-    setInvites(updated);
-    if (newCode) setNewCode('');
+  const copyToken = () => {
+    navigator.clipboard?.writeText(token).then(()=>{setCopiedToken(true);setTimeout(()=>setCopiedToken(false),2000);});
   };
-
-  const fmtD = iso => new Date(iso).toLocaleDateString('de-AT', {day:'2-digit',month:'short',year:'numeric'});
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{width:480,padding:28}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
+      <div className="modal-box" style={{width:520,padding:28}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
           <div>
-            <h2 style={{fontSize:17,fontWeight:700}}>Einladungen</h2>
-            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Nur Personen mit einem Code können ein Konto einrichten.</p>
+            <h2 style={{fontSize:17,fontWeight:700}}>Mitglied einladen</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3,lineHeight:1.5}}>Erstelle einen Einladungs-Token. Mitglied wählt eigenes Passwort und sieht <strong>genau dieselben Daten</strong> wie du.</p>
           </div>
           <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
         </div>
 
-        {/* Generate new invite */}
-        <div style={{background:'#FAF9F7',borderRadius:12,padding:16,marginBottom:20}}>
-          <label style={lbl}>Neue Einladung erstellen</label>
-          <div style={{display:'flex',gap:8,marginTop:6}}>
-            <input value={label} onChange={e=>setLabel(e.target.value)} placeholder="Label, z.B. Name des Eingeladenen"
-              onKeyDown={e=>e.key==='Enter'&&generate()} style={{flex:1}}/>
-            <button className="btn btn-primary btn-sm" onClick={generate} disabled={busy} style={{flexShrink:0}}>
-              {busy?'…':'+ Erstellen'}
-            </button>
+        {!cloudReady && (
+          <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:10,padding:'12px 14px',marginBottom:16,fontSize:12.5,color:'#9A3412',lineHeight:1.55}}>
+            <strong>Cloud-Sync nicht aktiv.</strong> Aktiviere zuerst Cloud-Sync (links unten in der Sidebar), sonst können Mitglieder die Daten nicht sehen.
           </div>
-          {newCode && (
-            <div style={{marginTop:12,padding:'14px 16px',background:'white',borderRadius:11,border:'1.5px solid #E8E4DF'}}>
-              {/* Shareable invite link — primary action */}
-              <div style={{fontSize:11,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
-                <span style={{color:'#16a34a'}}>✦</span> Einladungslink — einfach teilen
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                <div style={{fontSize:12,color:'#3F3A35',flex:1,wordBreak:'break-all',padding:'8px 10px',background:'#FAFAF8',borderRadius:7,fontFamily:'monospace',lineHeight:1.4}}>{buildInviteLink(newCode)}</div>
-                <button className="btn btn-primary btn-sm" onClick={copyLink} style={{flexShrink:0}}>
-                  {copiedLink?'✓ Kopiert':'Link kopieren'}
-                </button>
-              </div>
-              <div style={{fontSize:12,color:'#6B6560',marginBottom:12,lineHeight:1.5}}>Sende den Link an die Person. Beim Öffnen ist der Code bereits eingetragen — sie muss nur noch E-Mail und Passwort eingeben.</div>
+        )}
 
-              {/* Just the code — fallback */}
-              <div style={{borderTop:'1px solid #F0EDE8',paddingTop:10}}>
-                <div style={{fontSize:10.5,color:'#B0ABA5',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Oder nur der Code</div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{fontFamily:'monospace',fontSize:14,fontWeight:600,letterSpacing:'2px',color:'#3F3A35',flex:1}}>{newCode}</div>
-                  <button className="btn btn-ghost btn-sm" onClick={copyCode} style={{flexShrink:0,fontSize:11.5}}>
-                    {copiedCode?'✓':'Kopieren'}
-                  </button>
-                </div>
-              </div>
-              <div style={{fontSize:11.5,color:'#A8A39D',marginTop:10,fontStyle:'italic'}}>Funktioniert nur einmal.</div>
+        {!token && (
+          <button className="btn btn-primary" onClick={generate} disabled={busy||!cloudReady} style={{width:'100%',justifyContent:'center'}}>
+            {busy?'…':<><Icons.Plus/>Einladungs-Token erstellen</>}
+          </button>
+        )}
+
+        {err && <div style={{fontSize:12.5,color:'#C0392B',padding:'8px 12px',background:'#FEF2F2',borderRadius:8,marginTop:12,border:'1px solid #FECACA'}}>{err}</div>}
+
+        {token && (<>
+          <div style={{padding:'14px 16px',background:'white',borderRadius:11,border:'1.5px solid #E8E4DF',marginBottom:14}}>
+            <div style={{fontSize:11,color:'#A8A39D',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{color:'#16a34a'}}>✦</span> Einladungslink (empfohlen)
             </div>
-          )}
-        </div>
-
-        {/* Invite list */}
-        <label style={lbl}>Alle Einladungen ({invites.length})</label>
-        {invites.length === 0
-          ? <div style={{fontSize:13,color:'#C8C3BD',padding:'16px 0'}}>Noch keine Einladungen erstellt.</div>
-          : <div style={{display:'grid',gap:8,marginTop:8}}>
-            {[...invites].reverse().map(inv=>(
-              <div key={inv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:10,background:inv.used?'#F8F6F3':'white',border:'1px solid',borderColor:inv.used?'transparent':'#E8E4DF'}}>
-                <div>
-                  <div style={{fontSize:13.5,fontWeight:600,color:inv.used?'#B0ABA5':'#141210'}}>{inv.label}</div>
-                  <div style={{fontSize:11.5,color:'#C0BBB5',marginTop:2}}>
-                    Erstellt {fmtD(inv.created)}
-                    {inv.used && <span style={{color:'#22c55e',fontWeight:600,marginLeft:8}}>✓ Verwendet {inv.usedAt?fmtD(inv.usedAt):''}</span>}
-                  </div>
-                </div>
-                <button onClick={()=>deleteInvite(inv.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,padding:'0 4px'}}
-                  onMouseEnter={e=>e.currentTarget.style.color='#C0392B'}
-                  onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
-              </div>
-            ))}
+            <div style={{fontSize:12,color:'#3F3A35',wordBreak:'break-all',padding:'8px 10px',background:'#FAFAF8',borderRadius:7,fontFamily:'monospace',lineHeight:1.4,marginBottom:8,maxHeight:80,overflow:'auto'}}>{buildInviteLink(token)}</div>
+            <button className="btn btn-primary btn-sm" onClick={copyLink} style={{width:'100%',justifyContent:'center'}}>
+              {copiedLink?'✓ Link kopiert':'Link kopieren'}
+            </button>
+            <div style={{fontSize:12,color:'#6B6560',marginTop:10,lineHeight:1.5}}>
+              Sende den Link sicher (z.B. via Bitwarden, Signal). Mitglied wählt nur noch <strong>eigene Email + eigenes Passwort</strong>.
+            </div>
           </div>
-        }
 
-        <div style={{marginTop:18,padding:'10px 14px',background:'#FFF7ED',borderRadius:10,border:'1px solid #FED7AA'}}>
-          <div style={{fontSize:12.5,color:'#B45309',lineHeight:1.5}}>
-            <strong>Hinweis:</strong> Einladungscodes geben Zugang zur Einrichtung einer <em>separaten</em> CRM-Instanz mit eigenen Daten. Codes können nur einmal verwendet werden.
+          <div style={{padding:'12px 14px',background:'#FAFAF8',borderRadius:10,border:'1px solid #E8E4DF',marginBottom:14}}>
+            <div style={{fontSize:10.5,color:'#B0ABA5',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Nur der Token (manuelle Eingabe)</div>
+            <div style={{fontFamily:'monospace',fontSize:11,color:'#3F3A35',background:'white',padding:'8px 10px',borderRadius:6,wordBreak:'break-all',maxHeight:70,overflow:'auto',marginBottom:6,lineHeight:1.4}}>{token}</div>
+            <button className="btn btn-ghost btn-sm" onClick={copyToken}>{copiedToken?'✓ Kopiert':'Token kopieren'}</button>
           </div>
-        </div>
+
+          <div style={{padding:'10px 14px',background:'#FEF2F2',borderRadius:10,border:'1px solid #FECACA',fontSize:12,color:'#9A1F1F',lineHeight:1.5,marginBottom:14}}>
+            <strong>Wichtig:</strong> Der Token enthält Master-Schlüssel + Cloud-Zugang. Behandle ihn wie ein Passwort.
+          </div>
+
+          <div style={{display:'flex',gap:8,justifyContent:'space-between'}}>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setToken('')}>Neuen erstellen</button>
+            <button className="btn btn-primary btn-sm" onClick={onClose}>Fertig</button>
+          </div>
+        </>)}
       </div>
     </div>
   );
@@ -1883,7 +1912,7 @@ function MembersModal({members,onSave,onClose}){
   };
   const remove=id=>setList(l=>l.filter(m=>m.id!==id));
   const startEdit=m=>{setEditing(m.id);setForm({name:m.name,email:m.email,role:m.role,notes:m.notes||''});};
-  const genInvite=async m=>{const code=await createInvite('Für '+m.name);setGeneratedCode(code);setInviteFor(m.name);};
+  const genInvite=async m=>{alert('Bitte nutze in der Sidebar links unten den Eintrag "Einladungen" um einen Einladungs-Token zu erstellen.');};
   const copyCode=()=>{navigator.clipboard?.writeText(generatedCode);setCopied(true);setTimeout(()=>setCopied(false),2000);};
   const roleBadge=r=>{const c=r==='Admin'?{bg:'#EFF6FF',color:'#1d4ed8'}:r==='Mitglied'?{bg:'#F0FDF4',color:'#15803d'}:{bg:'#F8FAFC',color:'#64748b'};return<span style={{padding:'2px 8px',borderRadius:99,fontSize:11,fontWeight:600,background:c.bg,color:c.color}}>{r}</span>;};
   return(
@@ -2074,17 +2103,27 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     return ()=>setSyncListener(null);
   },[]);
 
-  // Poll for updates from other team members every 30s
+  // Poll for updates + refresh on tab focus (cloud is the source of truth)
+  const refreshFromCloud = async () => {
+    if(!cloudConnected) return false;
+    const fresh=await ghCheckForUpdates(cryptoKey);
+    if(fresh){
+      skipNextSaveRef.current=true;
+      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[]}));
+      return true;
+    }
+    return false;
+  };
   useEffect(()=>{
     if(!cloudConnected)return;
-    const iv=setInterval(async()=>{
-      const fresh=await ghCheckForUpdates(cryptoKey);
-      if(fresh){
-        skipNextSaveRef.current=true;
-        setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[]}));
-      }
-    },30000);
-    return ()=>clearInterval(iv);
+    const iv=setInterval(refreshFromCloud,30000);
+    const onFocus = () => { refreshFromCloud(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', () => { if(!document.hidden) refreshFromCloud(); });
+    return ()=>{
+      clearInterval(iv);
+      window.removeEventListener('focus', onFocus);
+    };
   },[cloudConnected,cryptoKey]);
 
   useEffect(()=>{
@@ -2278,7 +2317,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     {modal==='addSection'&&<AddSectionModal onAdd={s=>{upd({sections:[...state.sections,s]});setActiveId(s.id);setModal(null);}} onClose={()=>setModal(null)}/>}
     {modal==='members'&&<MembersModal members={state.members||[]} onSave={m=>upd({members:m})} onClose={()=>setModal(null)}/>}
     {modal==='csvImport'&&<CSVImportModal sections={state.sections} onImport={newContacts=>upd({contacts:[...state.contacts,...newContacts]})} onClose={()=>setModal(null)}/>}
-    {modal==='invites'&&<InviteManagerModal onClose={()=>setModal(null)}/>}
+    {modal==='invites'&&<InviteManagerModal masterKey={cryptoKey} onClose={()=>setModal(null)}/>}
     {modal==='addField'&&<AddFieldModal sections={state.sections} customFields={state.customFields} onAdd={f=>upd({customFields:[...state.customFields,f]})} onDelete={id=>upd({customFields:state.customFields.filter(f=>f.id!==id)})} onClose={()=>setModal(null)}/>}
     {modal==='githubSync'&&<GithubSyncModal
       cryptoKey={cryptoKey}
@@ -2323,7 +2362,7 @@ function AuthWrapper(){
 
   const handleReset=()=>{
     if(!window.confirm(`Alle verschlüsselten Daten unwiderruflich löschen?\n\nWiederherstellungskontakt: ${RECOVERY_EMAIL}`))return;
-    [SALT_KEY,VERIFY_KEY,TOTP_KEY,DATA_KEY,EMAIL_HASH_KEY,INVITES_KEY,DEVICE_KEY_STORE,TOTP_ENC_STORE,PKEY_ENC_STORE,GH_SETTINGS_KEY].forEach(k=>localStorage.removeItem(k));
+    [SALT_KEY,VERIFY_KEY,TOTP_KEY,DATA_KEY,EMAIL_HASH_KEY,INVITES_KEY,DEVICE_KEY_STORE,TOTP_ENC_STORE,PKEY_ENC_STORE,GH_SETTINGS_KEY,MASTER_KEY_STORE].forEach(k=>localStorage.removeItem(k));
     clearGithubSettings();
     setPhase('setup');
   };
