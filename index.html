@@ -3095,14 +3095,16 @@ function AuthWrapper(){
           const dk = await getOrCreateDeviceKey();
           const b64key = await aesDecrypt(dk, JSON.parse(localStorage.getItem(PKEY_ENC_STORE)));
           const key = await crypto.subtle.importKey('raw',fromB64(b64key),{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-          let data = await loadEncrypted(key);
-          if(key && data){
+          if(key){
+            // Load GitHub settings first (so loadEncrypted can fetch from GitHub)
             if(hasGithubSettings()){
-              try{ await loadGithubSettings(key); const fresh=await loadEncrypted(key); if(fresh) data=fresh; }catch(e){}
+              try{ await loadGithubSettings(key); }catch(e){}
             }
-            setCryptoKey(key); setCrmData(data); setPhase('app'); return;
+            let data = await loadEncrypted(key);
+            console.log('[auto-login] success');
+            setCryptoKey(key); setCrmData(data || DEFAULT_STATE); setPhase('app'); return;
           }
-        }catch(e){}
+        }catch(e){ console.warn('[auto-login] failed:', e); }
       }
       setPhase(hasSetup()?'login':'setup');
     })();
