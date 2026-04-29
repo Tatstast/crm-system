@@ -512,7 +512,9 @@ const DEFAULT_QUOTE_SETTINGS = {
   taxRate:20,
   currency:'EUR',
   quoteCounter:1,
-  quotePrefix:'AN'
+  quotePrefix:'AN',
+  logoUrl:'',
+  bannerUrl:''
 };
 const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS};
 
@@ -2562,10 +2564,46 @@ function QuoteSettingsModal({settings, onSave, onClose}){
         <input value={s.defaultFooter} onChange={e=>u('defaultFooter',e.target.value)} placeholder="Schluss-Satz (z.B. Wir freuen uns auf …)" style={{marginBottom:18}}/>
 
         <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Design</div>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
           <div style={{fontSize:12.5,color:'#6B6560',flex:1}}>Akzent-Farbe (Titel + Linien im Angebot)</div>
           <input type="color" value={s.accentColor||'#141210'} onChange={e=>u('accentColor',e.target.value)} style={{width:48,height:36,padding:2,cursor:'pointer'}}/>
           <input value={s.accentColor||'#141210'} onChange={e=>u('accentColor',e.target.value)} style={{width:100,fontFamily:'monospace',fontSize:12}}/>
+        </div>
+        {/* Logo upload */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12.5,color:'#6B6560',marginBottom:8}}>Firmen-Logo (wird auf dem Angebot angezeigt)</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {s.logoUrl ? (
+              <div style={{position:'relative',display:'inline-flex'}}>
+                <img src={s.logoUrl} style={{height:44,maxWidth:160,objectFit:'contain',border:'1.5px solid #E5E1DC',borderRadius:8,padding:'4px 8px',background:'white'}} alt="Logo"/>
+                <button onClick={()=>u('logoUrl','')} style={{position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#C0392B',border:'none',color:'white',cursor:'pointer',fontSize:11,lineHeight:'18px',textAlign:'center',padding:0}}>×</button>
+              </div>
+            ) : (
+              <div style={{width:160,height:44,border:'1.5px dashed #D8D3CE',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#C8C3BD',fontSize:12}}>Kein Logo</div>
+            )}
+            <label style={{cursor:'pointer'}}>
+              <span className="btn btn-ghost btn-sm" style={{pointerEvents:'none'}}>Logo hochladen</span>
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>u('logoUrl',ev.target.result);r.readAsDataURL(f);}}/>
+            </label>
+          </div>
+        </div>
+        {/* Banner upload */}
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:12.5,color:'#6B6560',marginBottom:8}}>Cover-Banner (großes Hintergrundbild auf der Titelseite)</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {s.bannerUrl ? (
+              <div style={{position:'relative',display:'inline-flex'}}>
+                <img src={s.bannerUrl} style={{height:56,width:180,objectFit:'cover',border:'1.5px solid #E5E1DC',borderRadius:8}} alt="Banner"/>
+                <button onClick={()=>u('bannerUrl','')} style={{position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#C0392B',border:'none',color:'white',cursor:'pointer',fontSize:11,lineHeight:'18px',textAlign:'center',padding:0}}>×</button>
+              </div>
+            ) : (
+              <div style={{width:180,height:56,border:'1.5px dashed #D8D3CE',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#C8C3BD',fontSize:12}}>Kein Banner</div>
+            )}
+            <label style={{cursor:'pointer'}}>
+              <span className="btn btn-ghost btn-sm" style={{pointerEvents:'none'}}>Banner hochladen</span>
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>u('bannerUrl',ev.target.result);r.readAsDataURL(f);}}/>
+            </label>
+          </div>
         </div>
 
         <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standard-Werte</div>
@@ -2796,43 +2834,89 @@ ${settings.companyName || ''}`;
       <div className="quote-paper">
         {/* === COVER === */}
         <div style={{minHeight:'240mm',display:'flex',flexDirection:'column'}}>
-          {/* Top: small label + company name */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'30mm'}}>
-            <div>
-              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:600,marginBottom:'1mm'}}>Angebot</div>
-              <div style={{fontSize:'9pt',color:'#3F3A35',fontFamily:'monospace',letterSpacing:'0.05em'}}>{quote.number}</div>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontWeight:700,fontSize:'12pt',color:accent,letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
-              {settings.companyWebsite && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1mm'}}>{settings.companyWebsite}</div>}
-            </div>
-          </div>
 
-          {/* Hero */}
+          {/* ── BANNER (full-bleed, escapes paper padding) ── */}
+          {settings.bannerUrl ? (
+            <div style={{
+              marginTop:'-22mm', marginLeft:'-20mm', marginRight:'-20mm',
+              height:'82mm', flexShrink:0, position:'relative', marginBottom:'10mm',
+              backgroundImage:`url(${settings.bannerUrl})`,
+              backgroundSize:'cover', backgroundPosition:'center',
+              overflow:'hidden'
+            }}>
+              {/* subtle bottom gradient so text below banner has clean start */}
+              <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%)'}}/>
+              {/* Logo top-right on banner */}
+              {settings.logoUrl && (
+                <img src={settings.logoUrl} alt="Logo" style={{position:'absolute',top:'6mm',right:'8mm',height:'13mm',maxWidth:'55mm',objectFit:'contain',filter:'drop-shadow(0 1px 4px rgba(0,0,0,0.35))'}}/>
+              )}
+              {/* Quote number + label bottom-left */}
+              <div style={{position:'absolute',bottom:'6mm',left:'8mm'}}>
+                <div style={{fontSize:'7pt',color:'rgba(255,255,255,0.75)',textTransform:'uppercase',letterSpacing:'0.18em',fontWeight:700,marginBottom:'0.5mm'}}>Angebot</div>
+                <div style={{fontSize:'8.5pt',color:'white',fontFamily:'monospace',fontWeight:600,letterSpacing:'0.04em'}}>{quote.number}</div>
+              </div>
+              {/* Status badge bottom-right */}
+              <div style={{position:'absolute',bottom:'6mm',right:'8mm',fontSize:'7.5pt',fontWeight:700,color:'white',background:'rgba(255,255,255,0.18)',backdropFilter:'blur(4px)',padding:'2px 7px',borderRadius:99,letterSpacing:'0.06em'}}>{status.label}</div>
+            </div>
+          ) : (
+            /* ── NO BANNER: classic header row ── */
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'30mm'}}>
+              <div>
+                <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:600,marginBottom:'1mm'}}>Angebot</div>
+                <div style={{fontSize:'9pt',color:'#3F3A35',fontFamily:'monospace',letterSpacing:'0.05em'}}>{quote.number}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                {settings.logoUrl ? (
+                  <img src={settings.logoUrl} alt="Logo" style={{height:'12mm',maxWidth:'55mm',objectFit:'contain'}}/>
+                ) : (
+                  <>
+                    <div style={{fontWeight:700,fontSize:'12pt',color:accent,letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
+                    {settings.companyWebsite && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1mm'}}>{settings.companyWebsite}</div>}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── After banner: company name / logo row (only when banner present) ── */}
+          {settings.bannerUrl && (
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10mm'}}>
+              {settings.logoUrl ? (
+                <img src={settings.logoUrl} alt="Logo" style={{height:'10mm',maxWidth:'50mm',objectFit:'contain',opacity:0}}/>
+              ) : (
+                <div style={{fontWeight:700,fontSize:'11pt',color:accent,letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
+              )}
+              {settings.companyWebsite && (
+                <div style={{fontSize:'8.5pt',color:'#9A9590'}}>{settings.companyWebsite}</div>
+              )}
+            </div>
+          )}
+
+          {/* ── HERO: client name + project ── */}
           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-            <div style={{fontSize:'9pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,marginBottom:'4mm'}}>Für</div>
-            <h1 style={{fontSize:'28pt',fontWeight:800,color:accent,letterSpacing:'-0.025em',lineHeight:1.05,marginBottom:'10mm'}}>{quote.contactSnapshot.firma || '—'}</h1>
+            <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.18em',fontWeight:700,marginBottom:'4mm'}}>Für</div>
+            <h1 style={{fontSize:'30pt',fontWeight:800,color:accent,letterSpacing:'-0.03em',lineHeight:1.0,marginBottom:'10mm'}}>{quote.contactSnapshot.firma || '—'}</h1>
             {quote.title && (
-              <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'6mm',maxWidth:'90%'}}>
-                <div style={{fontSize:'9pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,marginBottom:'3mm'}}>Projekt</div>
+              <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'6mm',maxWidth:'88%'}}>
+                <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'3mm'}}>Projekt</div>
                 <div style={{fontSize:'17pt',fontWeight:700,color:'#141210',lineHeight:1.25,letterSpacing:'-0.01em'}}>{quote.title}</div>
               </div>
             )}
           </div>
 
-          {/* Bottom meta */}
-          <div style={{display:'flex',gap:'16mm',marginTop:'30mm',paddingTop:'8mm',borderTop:'0.5pt solid #E5E1DC'}}>
-            <div>
-              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Datum</div>
-              <div style={{fontSize:'10pt',fontWeight:600}}>{fmtD(quote.date)}</div>
+          {/* ── BOTTOM META STRIP ── */}
+          <div style={{marginTop:'16mm',display:'flex',gap:0,borderRadius:'2.5mm',overflow:'hidden',border:`1.5pt solid ${accent}`}}>
+            <div style={{flex:1,padding:'5mm 7mm',borderRight:`1pt solid ${accent}`}}>
+              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:700,marginBottom:'1.5mm'}}>Datum</div>
+              <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.date)}</div>
             </div>
-            <div>
-              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Gültig bis</div>
-              <div style={{fontSize:'10pt',fontWeight:600}}>{fmtD(quote.validUntil)}</div>
+            <div style={{flex:1,padding:'5mm 7mm',borderRight:`1pt solid ${accent}`}}>
+              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:700,marginBottom:'1.5mm'}}>Gültig bis</div>
+              <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.validUntil)}</div>
             </div>
-            <div style={{flex:1,textAlign:'right'}}>
-              <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:600,marginBottom:'1.5mm'}}>Investition</div>
-              <div style={{fontSize:'13pt',fontWeight:800,color:accent,fontVariantNumeric:'tabular-nums',letterSpacing:'-0.01em'}}>{fmtMoney(totals.total,cur)}</div>
+            <div style={{flex:1.4,padding:'5mm 7mm',background:accent}}>
+              <div style={{fontSize:'7pt',color:'rgba(255,255,255,0.65)',textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:700,marginBottom:'1.5mm'}}>Investition</div>
+              <div style={{fontSize:'14pt',fontWeight:800,color:'white',fontVariantNumeric:'tabular-nums',letterSpacing:'-0.02em'}}>{fmtMoney(totals.total,cur)}</div>
             </div>
           </div>
         </div>
