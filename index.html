@@ -2832,7 +2832,7 @@ function QuoteSettingsModal({settings, onSave, onClose}){
         </div>
 
         <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Standard-Werte</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:18}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
           <div>
             <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>USt-Satz %</div>
             <input type="number" value={s.taxRate} onChange={e=>u('taxRate',Number(e.target.value)||0)}/>
@@ -2847,6 +2847,14 @@ function QuoteSettingsModal({settings, onSave, onClose}){
             <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Nummer-Präfix</div>
             <input value={s.quotePrefix} onChange={e=>u('quotePrefix',e.target.value)}/>
           </div>
+        </div>
+        <div style={{background:'#FFFBEB',borderRadius:8,padding:'10px 12px',border:'1px solid #FDE68A',marginBottom:18}}>
+          <div style={{fontSize:11.5,color:'#92400E',marginBottom:4,fontWeight:600}}>Nächste Angebotsnummer (frei wählbar)</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <input type="number" value={s.quoteCounter||1} onChange={e=>u('quoteCounter',Math.max(1,Number(e.target.value)||1))} min={1} style={{width:120,fontFamily:'monospace'}}/>
+            <span style={{fontSize:12,color:'#92400E'}}>→ Nächstes Angebot: <strong style={{fontFamily:'monospace'}}>{s.quotePrefix||'AN'}-{new Date().getFullYear()}-{String(s.quoteCounter||1).padStart(3,'0')}</strong></span>
+          </div>
+          <div style={{fontSize:11,color:'#A88A4F',marginTop:5,lineHeight:1.5}}>Setze hier jede beliebige Startzahl (z.B. 158). Bestehende Angebote werden nicht verändert.</div>
         </div>
 
         <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
@@ -3387,6 +3395,14 @@ function InvoiceSettingsModal({quoteSettings, invoiceSettings, onSave, onClose})
             <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Standard USt %</div>
             <input type="number" value={qs.taxRate} onChange={e=>uq('taxRate',Number(e.target.value))} min={0} max={100}/>
           </div>
+        </div>
+        <div style={{background:'#FFFBEB',borderRadius:8,padding:'10px 12px',border:'1px solid #FDE68A',marginBottom:10}}>
+          <div style={{fontSize:11.5,color:'#92400E',marginBottom:4,fontWeight:600}}>Nächste Rechnungsnummer (frei wählbar)</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <input type="number" value={is_.invoiceCounter} onChange={e=>ui('invoiceCounter',Math.max(1,Number(e.target.value)||1))} min={1} style={{width:120,fontFamily:'monospace'}}/>
+            <span style={{fontSize:12,color:'#92400E'}}>→ Nächste Rechnung: <strong style={{fontFamily:'monospace'}}>{is_.numberPrefix||'RE'}-{new Date().getFullYear()}-{String(is_.invoiceCounter||1).padStart(3,'0')}</strong></span>
+          </div>
+          <div style={{fontSize:11,color:'#A88A4F',marginTop:5,lineHeight:1.5}}>Du kannst hier jede beliebige Startzahl eintragen (z.B. 247) — die Nummerierung läuft dann fortlaufend weiter. <strong>Wichtig:</strong> Bestehende Rechnungen werden nicht verändert.</div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
           <div>
