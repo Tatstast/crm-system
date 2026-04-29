@@ -2670,19 +2670,21 @@ function nextInvoiceNumber(settings) {
   const num = String(settings.invoiceCounter||1).padStart(3,'0');
   return `${settings.numberPrefix||'RE'}-${year}-${num}`;
 }
+function contactToSnapshot(c){
+  if(!c)return {};
+  return {firma:c.firma||'',ansprechpartner:c.ansprechpartner||'',email:c.email||'',telefon:c.telefon||'',address:c.address||'',zip:c.zip||'',city:c.city||'',country:c.country||'',taxId:c.taxId||''};
+}
 function blankInvoice(contact, quoteSettings, invoiceSettings, fromQuote) {
   const today = new Date().toISOString().slice(0,10);
   const dueDays = invoiceSettings?.defaultDueDays||14;
   const due = new Date(Date.now()+dueDays*86400000).toISOString().slice(0,10);
-  const snap = contact
-    ? {firma:contact.firma,ansprechpartner:contact.ansprechpartner||'',email:contact.email||'',telefon:contact.telefon||''}
-    : (fromQuote?.contactSnapshot||{});
+  const snap = contact ? contactToSnapshot(contact) : (fromQuote?.contactSnapshot||{});
   return {
     id:uid(), number:nextInvoiceNumber(invoiceSettings||{}), status:'entwurf',
     contactId:contact?.id||fromQuote?.contactId||'',
     contactSnapshot:snap,
     items:fromQuote ? (fromQuote.items||[]).map(i=>({...i,id:uid()})) : [{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],
-    date:today, dueDate:due,
+    date:today, dueDate:due, serviceDate:today, serviceEndDate:'',
     taxRate:fromQuote?.taxRate||(quoteSettings?.taxRate||20),
     discount:fromQuote?.discount||0,
     title:fromQuote?.title||'',
@@ -3432,7 +3434,8 @@ function InvoiceSettingsModal({quoteSettings, invoiceSettings, onSave, onClose})
 function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quotes, onSave, onClose, onPreview, onCreateContact}){
   const [inv,setInv]=useState(invoice);
   const [newCust,setNewCust]=useState(false);
-  const [nc,setNc]=useState({firma:'',ansprechpartner:'',email:'',telefon:'',address:''});
+  const [nc,setNc]=useState({firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:''});
+  const us=(k,v)=>setInv(p=>({...p,contactSnapshot:{...(p.contactSnapshot||{}),[k]:v}}));
   const u=(k,v)=>setInv(p=>({...p,[k]:v}));
   const totals=quoteTotals(inv);
   const cur=quoteSettings?.currency||'EUR';
@@ -3445,11 +3448,11 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
   const acceptedQ=(quotes||[]).filter(q=>q.status==='akzeptiert'||q.status==='gesendet');
   const submitNewCust=()=>{
     if(!nc.firma.trim())return;
-    const c={id:uid(),firma:nc.firma.trim(),ansprechpartner:nc.ansprechpartner.trim(),email:nc.email.trim(),telefon:nc.telefon.trim(),address:nc.address.trim(),sectionId:(contacts[0]?.sectionId||'hauptkunden'),subsectionId:null,status:'Aktiv',notizen:'',umsatz:'',reminders:[],activities:[],customValues:{}};
+    const c={id:uid(),firma:nc.firma.trim(),ansprechpartner:nc.ansprechpartner.trim(),email:nc.email.trim(),telefon:nc.telefon.trim(),address:nc.address.trim(),zip:nc.zip.trim(),city:nc.city.trim(),country:nc.country.trim(),taxId:nc.taxId.trim(),sectionId:(contacts[0]?.sectionId||'hauptkunden'),subsectionId:null,status:'Aktiv',notizen:'',umsatz:'',reminders:[],activities:[],customValues:{}};
     onCreateContact(c);
     u('contactId',c.id);
-    u('contactSnapshot',{firma:c.firma,ansprechpartner:c.ansprechpartner,email:c.email,telefon:c.telefon});
-    setNc({firma:'',ansprechpartner:'',email:'',telefon:'',address:''});
+    u('contactSnapshot',contactToSnapshot(c));
+    setNc({firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:''});
     setNewCust(false);
   };
   return(
@@ -3490,22 +3493,38 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
                     <input value={nc.email} onChange={e=>setNc(p=>({...p,email:e.target.value}))} placeholder="E-Mail" style={{fontSize:13}}/>
                     <input value={nc.telefon} onChange={e=>setNc(p=>({...p,telefon:e.target.value}))} placeholder="Telefon" style={{fontSize:13}}/>
                   </div>
-                  <textarea value={nc.address} onChange={e=>setNc(p=>({...p,address:e.target.value}))} placeholder="Adresse" rows={2} style={{fontSize:13,resize:'vertical'}}/>
+                  <input value={nc.address} onChange={e=>setNc(p=>({...p,address:e.target.value}))} placeholder="Straße + Hausnummer" style={{fontSize:13}}/>
+                  <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr',gap:8}}>
+                    <input value={nc.zip} onChange={e=>setNc(p=>({...p,zip:e.target.value}))} placeholder="PLZ" style={{fontSize:13}}/>
+                    <input value={nc.city} onChange={e=>setNc(p=>({...p,city:e.target.value}))} placeholder="Ort" style={{fontSize:13}}/>
+                    <input value={nc.country} onChange={e=>setNc(p=>({...p,country:e.target.value}))} placeholder="Land" style={{fontSize:13}}/>
+                  </div>
+                  <input value={nc.taxId} onChange={e=>setNc(p=>({...p,taxId:e.target.value}))} placeholder="UID / USt-IdNr (optional)" style={{fontSize:13,fontFamily:'monospace'}}/>
                   <button onClick={submitNewCust} className="btn btn-primary btn-sm" style={{alignSelf:'flex-start',marginTop:2}} disabled={!nc.firma.trim()}>Anlegen &amp; auswählen</button>
                 </div>
               ) : (
-              <select value={inv.contactId} onChange={e=>{const c=contacts.find(x=>x.id===e.target.value);u('contactId',e.target.value);if(c)u('contactSnapshot',{firma:c.firma,ansprechpartner:c.ansprechpartner||'',email:c.email||'',telefon:c.telefon||''});}} style={{width:'100%'}}>
+              <select value={inv.contactId} onChange={e=>{const c=contacts.find(x=>x.id===e.target.value);u('contactId',e.target.value);if(c)u('contactSnapshot',contactToSnapshot(c));}} style={{width:'100%'}}>
                 <option value="">— Kunden wählen —</option>
                 {contacts.map(c=><option key={c.id} value={c.id}>{c.firma}</option>)}
               </select>
               )}
             </div>
-            {inv.contactSnapshot?.firma&&(
-              <div style={{background:'#FAFAF8',borderRadius:10,padding:'12px 14px',fontSize:13,lineHeight:1.7,border:'1px solid #EEEAE5'}}>
-                <div style={{fontWeight:700}}>{inv.contactSnapshot.firma}</div>
-                {inv.contactSnapshot.ansprechpartner&&<div style={{color:'#6B6560'}}>{inv.contactSnapshot.ansprechpartner}</div>}
-                {inv.contactSnapshot.email&&<div style={{color:'#6B6560'}}>{inv.contactSnapshot.email}</div>}
-                {inv.contactSnapshot.telefon&&<div style={{color:'#6B6560'}}>{inv.contactSnapshot.telefon}</div>}
+            {(inv.contactSnapshot?.firma||inv.contactId)&&(
+              <div style={{background:'#FAFAF8',borderRadius:10,padding:'12px 14px',border:'1px solid #EEEAE5',display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Empfänger-Daten (auf Rechnung)</div>
+                <input value={inv.contactSnapshot?.firma||''} onChange={e=>us('firma',e.target.value)} placeholder="Firmenname *" style={{fontSize:13,fontWeight:600}}/>
+                <input value={inv.contactSnapshot?.ansprechpartner||''} onChange={e=>us('ansprechpartner',e.target.value)} placeholder="Ansprechpartner" style={{fontSize:13}}/>
+                <input value={inv.contactSnapshot?.address||''} onChange={e=>us('address',e.target.value)} placeholder="Straße + Hausnummer" style={{fontSize:13}}/>
+                <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr',gap:6}}>
+                  <input value={inv.contactSnapshot?.zip||''} onChange={e=>us('zip',e.target.value)} placeholder="PLZ" style={{fontSize:13}}/>
+                  <input value={inv.contactSnapshot?.city||''} onChange={e=>us('city',e.target.value)} placeholder="Ort" style={{fontSize:13}}/>
+                  <input value={inv.contactSnapshot?.country||''} onChange={e=>us('country',e.target.value)} placeholder="Land" style={{fontSize:13}}/>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <input value={inv.contactSnapshot?.email||''} onChange={e=>us('email',e.target.value)} placeholder="E-Mail" style={{fontSize:13}}/>
+                  <input value={inv.contactSnapshot?.telefon||''} onChange={e=>us('telefon',e.target.value)} placeholder="Telefon" style={{fontSize:13}}/>
+                </div>
+                <input value={inv.contactSnapshot?.taxId||''} onChange={e=>us('taxId',e.target.value)} placeholder="UID / USt-IdNr (Pflicht ab netto €10.000)" style={{fontSize:13,fontFamily:'monospace'}}/>
               </div>
             )}
             <div><label style={lbl}>Projekttitel</label><input value={inv.title||''} onChange={e=>u('title',e.target.value)} placeholder="z.B. Website-Relaunch"/></div>
@@ -3513,8 +3532,12 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:16}}>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <div><label style={lbl}>Datum</label><input type="date" value={inv.date} onChange={e=>u('date',e.target.value)}/></div>
+              <div><label style={lbl}>Rechnungsdatum</label><input type="date" value={inv.date} onChange={e=>u('date',e.target.value)}/></div>
               <div><label style={lbl}>Fällig am</label><input type="date" value={inv.dueDate} onChange={e=>u('dueDate',e.target.value)}/></div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div><label style={lbl}>Leistungsdatum *</label><input type="date" value={inv.serviceDate||inv.date} onChange={e=>u('serviceDate',e.target.value)} title="Datum der Leistungserbringung — gesetzlich erforderlich"/></div>
+              <div><label style={lbl}>Leistung bis (optional)</label><input type="date" value={inv.serviceEndDate||''} onChange={e=>u('serviceEndDate',e.target.value)} title="Bei Zeitraum-Leistungen — sonst leer lassen"/></div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div><label style={lbl}>USt %</label><input type="number" value={inv.taxRate} onChange={e=>u('taxRate',Number(e.target.value))} min={0} max={100}/></div>
@@ -3607,10 +3630,15 @@ function InvoicePreview({invoice, settings, invoiceSettings, onClose}){
         </div>
         {/* META STRIP */}
         <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'3mm',marginBottom:'5mm',display:'flex',gap:'3mm'}}>
-          {[{label:'Datum',value:fmtD(invoice.date)},{label:'Fällig am',value:fmtD(invoice.dueDate),warn:isOverdue},{label:'Rechnungs-Nr.',value:invoice.number}].map(m=>(
+          {[
+            {label:'Rechnungsdatum',value:fmtD(invoice.date)},
+            {label:invoice.serviceEndDate?'Leistungszeitraum':'Leistungsdatum',value:invoice.serviceEndDate?`${fmtD(invoice.serviceDate||invoice.date)} – ${fmtD(invoice.serviceEndDate)}`:fmtD(invoice.serviceDate||invoice.date)},
+            {label:'Fällig am',value:fmtD(invoice.dueDate),warn:isOverdue},
+            {label:'Rechnungs-Nr.',value:invoice.number},
+          ].map(m=>(
             <div key={m.label} style={{flex:1,background:m.warn?'#FEF2F2':'#FAFAF8',borderRadius:'2mm',padding:'2.5mm 3.5mm',border:m.warn?'1pt solid #FECACA':'1pt solid #EEEAE5'}}>
               <div style={{fontSize:'6pt',color:m.warn?'#b91c1c':'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1mm'}}>{m.label}</div>
-              <div style={{fontSize:'9pt',fontWeight:700,color:m.warn?'#b91c1c':'#141210'}}>{m.value}</div>
+              <div style={{fontSize:'8.5pt',fontWeight:700,color:m.warn?'#b91c1c':'#141210'}}>{m.value}</div>
             </div>
           ))}
         </div>
@@ -3619,13 +3647,19 @@ function InvoicePreview({invoice, settings, invoiceSettings, onClose}){
           <div style={{padding:'3.5mm 4mm',background:'#FAFAF8',borderRadius:'2mm',border:'0.5pt solid #E5E1DC'}}>
             <div style={{fontSize:'6.5pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1.5mm'}}>Rechnungsempfänger</div>
             <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{invoice.contactSnapshot?.firma||'—'}</div>
-            {invoice.contactSnapshot?.ansprechpartner&&<div style={{fontSize:'8.5pt',color:'#6B6560',marginTop:'0.5mm'}}>{invoice.contactSnapshot.ansprechpartner}</div>}
-            {invoice.contactSnapshot?.email&&<div style={{fontSize:'8pt',color:'#9A9590',marginTop:'0.5mm'}}>{invoice.contactSnapshot.email}</div>}
+            {invoice.contactSnapshot?.ansprechpartner&&<div style={{fontSize:'8.5pt',color:'#6B6560',marginTop:'0.5mm'}}>z.Hd. {invoice.contactSnapshot.ansprechpartner}</div>}
+            {invoice.contactSnapshot?.address&&<div style={{fontSize:'8.5pt',color:'#3F3A35',marginTop:'1mm'}}>{invoice.contactSnapshot.address}</div>}
+            {(invoice.contactSnapshot?.zip||invoice.contactSnapshot?.city)&&<div style={{fontSize:'8.5pt',color:'#3F3A35'}}>{[invoice.contactSnapshot.zip,invoice.contactSnapshot.city].filter(Boolean).join(' ')}</div>}
+            {invoice.contactSnapshot?.country&&<div style={{fontSize:'8.5pt',color:'#3F3A35'}}>{invoice.contactSnapshot.country}</div>}
+            {invoice.contactSnapshot?.taxId&&<div style={{fontSize:'7.5pt',color:'#6B6560',marginTop:'1.5mm',fontFamily:'monospace'}}>UID: {invoice.contactSnapshot.taxId}</div>}
+            {invoice.contactSnapshot?.email&&<div style={{fontSize:'7.5pt',color:'#9A9590',marginTop:'1mm'}}>{invoice.contactSnapshot.email}</div>}
           </div>
           <div style={{padding:'3.5mm 4mm',background:'#FAFAF8',borderRadius:'2mm',border:'0.5pt solid #E5E1DC'}}>
             <div style={{fontSize:'6.5pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1.5mm'}}>Rechnungssteller</div>
             <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{settings?.companyName||'—'}</div>
-            {settings?.companyAddress&&<div style={{fontSize:'8pt',color:'#6B6560',whiteSpace:'pre-line',lineHeight:1.4,marginTop:'0.5mm'}}>{settings.companyAddress}</div>}
+            {settings?.companyAddress&&<div style={{fontSize:'8.5pt',color:'#3F3A35',whiteSpace:'pre-line',lineHeight:1.4,marginTop:'1mm'}}>{settings.companyAddress}</div>}
+            {settings?.taxId&&<div style={{fontSize:'7.5pt',color:'#6B6560',marginTop:'1.5mm',fontFamily:'monospace'}}>UID: {settings.taxId}</div>}
+            {settings?.companyEmail&&<div style={{fontSize:'7.5pt',color:'#9A9590',marginTop:'1mm'}}>{settings.companyEmail}</div>}
           </div>
         </div>
         {/* ITEMS TABLE */}
@@ -3683,6 +3717,10 @@ function InvoicePreview({invoice, settings, invoiceSettings, onClose}){
             <div style={{marginTop:'1.5mm',fontSize:'7.5pt',color:'#9A9590'}}>Zahlungsziel: {fmtD(invoice.dueDate)}</div>
           </div>
         )}
+        {/* LEGAL NOTE */}
+        <div style={{marginBottom:'3mm',fontSize:'7.5pt',color:'#6B6560',lineHeight:1.5,fontStyle:'italic'}}>
+          Diese Rechnung wurde elektronisch erstellt und ist auch ohne Unterschrift gültig.
+        </div>
         {/* FOOTER */}
         <div style={{paddingTop:'3mm',borderTop:'0.5pt solid #E5E1DC',display:'flex',gap:'6mm',fontSize:'7pt',color:'#9A9590',lineHeight:1.5}}>
           <div style={{flex:1}}><div style={{fontWeight:600,color:'#5F5A55',marginBottom:'0.5mm'}}>{settings?.companyName}</div>{settings?.companyAddress&&<div style={{whiteSpace:'pre-line'}}>{settings.companyAddress}</div>}</div>
