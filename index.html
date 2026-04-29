@@ -2646,10 +2646,10 @@ function quoteTotals(quote) {
 // ── Quote Settings Modal ─────────────────────────────────────────
 function TokenUpdateModal({cryptoKey, onSaved, onClose}){
   const current = _ghSettings;
-  const [token, setToken] = React.useState('');
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState('');
-  const [ok, setOk] = React.useState(false);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState(false);
 
   const save = async () => {
     if(!token.trim()){setErr('Bitte neuen Token eingeben.');return;}
