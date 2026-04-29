@@ -753,6 +753,8 @@ function AuthScreen({mode, onDone, onReset, onSwitchMode, prefilledInvite}) {
     setErr(''); setBusy(true);
     try {
       if (!joinedViaInvite) await saveEncrypted(derivedKey, DEFAULT_STATE);
+      // Persist key for auto-login on this device (parallels what the TOTP path does)
+      try { await storeKeyForDevice(derivedKey); } catch(e) {}
       onDone(derivedKey, DEFAULT_STATE);
     } catch(e) { setErr('Fehler. Bitte erneut versuchen.'); }
     setBusy(false);
@@ -3370,7 +3372,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     const fresh=await ghCheckForUpdates(cryptoKey);
     if(fresh){
       skipNextSaveRef.current=true;
-      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[]}));
+      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[], quotes:fresh.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(fresh.quoteSettings||{})}}));
       return true;
     }
     return false;
@@ -3658,7 +3660,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
         if (existingData) {
           // Loaded from GitHub — overwrite local state
           skipNextSaveRef.current=true;
-          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[], claudeAccounts:existingData.claudeAccounts||[], claudeTasks:existingData.claudeTasks||[]});
+          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[], claudeAccounts:existingData.claudeAccounts||[], claudeTasks:existingData.claudeTasks||[], quotes:existingData.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(existingData.quoteSettings||{})}});
         } else {
           // No remote yet — push current local state
           await saveEncrypted(cryptoKey, state);
