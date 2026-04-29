@@ -3472,7 +3472,7 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
           </div>
           <button onClick={()=>onPreview(inv)} className="btn btn-ghost btn-sm"><Icons.Eye/>Vorschau</button>
           <button onClick={()=>onSave(inv)} className="btn btn-primary btn-sm"><Icons.Check/>Speichern</button>
-          <button onClick={onClose} style={{background:'rgba(0,0,0,0.06)',border:'none',borderRadius:8,padding:8,cursor:'pointer',lineHeight:0}}><Icons.Close/></button>
+          <button onClick={()=>{const hasContent=inv.contactId||(inv.title&&inv.title.trim())||(inv.items||[]).some(i=>i.type!=='heading'&&i.description&&i.description.trim());if(hasContent)onSave({...inv,status:inv.status==='bezahlt'||inv.status==='storniert'?inv.status:'entwurf'});else onClose();}} style={{background:'rgba(0,0,0,0.06)',border:'none',borderRadius:8,padding:8,cursor:'pointer',lineHeight:0}} title="Schließen (als Entwurf speichern)"><Icons.Close/></button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,padding:28,overflowY:'auto',flex:1}}>
           <div style={{display:'flex',flexDirection:'column',gap:16}}>
@@ -3540,8 +3540,8 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
               {(inv.items||[]).map((it,idx)=>
                 it.type==='heading'?(
                   <div key={it.id} style={{display:'flex',gap:8,alignItems:'center',padding:'8px 12px',background:'#F7F5F2',borderBottom:idx<inv.items.length-1?'1px solid #EEEAE5':'none'}}>
-                    <span style={{fontSize:10,color:'#A8A39D',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',minWidth:60}}>Abschnitt</span>
-                    <input value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="Bezeichnung…" style={{flex:1,fontWeight:700,background:'transparent',border:'none',fontSize:13}}/>
+                    <span style={{fontSize:10,color:'#A8A39D',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.06em',minWidth:60}}>Abschnitt</span>
+                    <input value={it.description} onChange={e=>updateItem(it.id,'description',e.target.value)} placeholder="Bezeichnung…" style={{flex:1,fontWeight:400,background:'transparent',border:'none',fontSize:13}}/>
                     <button onClick={()=>removeItem(it.id)} style={{background:'none',border:'none',color:'#DDD',cursor:'pointer',fontSize:16,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
                   </div>
                 ):(
