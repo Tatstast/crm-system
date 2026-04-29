@@ -514,7 +514,7 @@ const DEFAULT_QUOTE_SETTINGS = {
   quoteCounter:1,
   quotePrefix:'AN'
 };
-const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS};
+const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS};
 
 const lbl = {display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'};
 
@@ -1648,6 +1648,20 @@ const COMMON_MODELS = ['Claude Opus 4.7','Claude Sonnet 4.6','Claude Haiku 4.5',
 
 const AI_AVATARS = ['🤖','🦾','🧠','⚡','🔮','💡','🎯','📊','📝','🔍','💼','🛠️','🎨','📞','📧'];
 
+const CLAUDE_PLANS = ['Pro', 'Max 5x', 'Max 20x', 'Team', 'Enterprise', 'API', 'Anderes…'];
+const CLAUDE_AVATARS = ['🤖','🧠','✨','💡','🎯','📊','📝','🔍','💼','🛠️','🎨','📞','📧','🚀','⚡','🦾','🔮','🎭','🌟','💫'];
+const TASK_STATUS = [
+  {key:'offen',label:'Offen',color:'#6B6560',bg:'#F5F3F0',dot:'#A8A39D'},
+  {key:'arbeit',label:'In Arbeit',color:'#0369a1',bg:'#EFF6FF',dot:'#3B82F6'},
+  {key:'erledigt',label:'Erledigt',color:'#16a34a',bg:'#F0FDF4',dot:'#22c55e'},
+  {key:'blockiert',label:'Blockiert',color:'#dc2626',bg:'#FEF2F2',dot:'#ef4444'},
+];
+const TASK_PRIORITY = [
+  {key:'niedrig',label:'Niedrig',color:'#6B6560',bg:'#F5F3F0'},
+  {key:'normal',label:'Normal',color:'#0369a1',bg:'#EFF6FF'},
+  {key:'hoch',label:'Hoch',color:'#dc2626',bg:'#FEF2F2'},
+];
+
 function fmtRelativeTime(ts){
   const diff = Date.now() - new Date(ts).getTime();
   const m = Math.floor(diff/60000);
@@ -1947,6 +1961,501 @@ function AIEmployeesView({employees, onUpdate, externalNewTrigger, onExternalNew
     </div>
     {modal === 'new' && <AIEmployeeModal onSave={saveEmployee} onClose={()=>setModal(null)}/>}
     {modal && modal.edit && <AIEmployeeModal employee={modal.edit} onSave={saveEmployee} onClose={()=>setModal(null)} onDelete={removeEmployee}/>}
+  </>);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CLAUDE KONTEN (mit Aufgaben-Zuweisung)
+// ══════════════════════════════════════════════════════════════════
+function ClaudeAccountModal({account, onSave, onClose, onDelete}){
+  const isNew = !account;
+  const [form, setForm] = useState(account || {
+    id: uid(),
+    avatar: CLAUDE_AVATARS[0],
+    name: '',
+    plan: CLAUDE_PLANS[0],
+    customPlan: '',
+    account: '',
+    notes: '',
+    status: 'aktiv',
+    createdAt: new Date().toISOString(),
+  });
+  const updField = (k,v) => setForm(f=>({...f,[k]:v}));
+  const submit = () => {
+    if(!form.name.trim()) return;
+    const finalPlan = form.plan === 'Anderes…' ? form.customPlan.trim() : form.plan;
+    onSave({...form, name:form.name.trim(), plan:finalPlan || form.plan, account:form.account.trim(), notes:form.notes.trim()});
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:560}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.01em'}}>{isNew?'Neues Claude Konto':'Claude Konto bearbeiten'}</h2>
+            <div style={{fontSize:12,color:'#A8A39D',marginTop:2}}>Verwalte deine Claude-Accounts an einem Ort.</div>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{display:'flex',gap:14,marginBottom:14}}>
+          <div style={{flexShrink:0}}>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Avatar</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,32px)',gap:4,maxWidth:172}}>
+              {CLAUDE_AVATARS.map(a=>(
+                <button key={a} onClick={()=>updField('avatar',a)} style={{width:32,height:32,borderRadius:8,fontSize:18,border:form.avatar===a?'2px solid #141210':'1.5px solid rgba(0,0,0,0.08)',background:form.avatar===a?'#FAFAF8':'white',cursor:'pointer',transition:'all 0.15s'}}>{a}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Name</div>
+              <input value={form.name} onChange={e=>updField('name',e.target.value)} placeholder="z.B. Haupt-Account, Marketing-Claude…" autoFocus/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Status</div>
+              <div style={{display:'flex',gap:6}}>
+                {AI_STATUS.map(s=>{
+                  const active = form.status === s.key;
+                  return(
+                    <button key={s.key} onClick={()=>updField('status',s.key)} style={{flex:1,padding:'7px 10px',borderRadius:9,fontSize:12,fontWeight:600,border:`1.5px solid ${active?s.color:'transparent'}`,background:active?s.bg:'#F5F3F0',color:active?s.color:'#6B6560',cursor:'pointer',transition:'all 0.15s'}}>{s.label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Plan</div>
+          <select value={form.plan} onChange={e=>updField('plan',e.target.value)}>
+            {CLAUDE_PLANS.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+          {form.plan === 'Anderes…' && (
+            <input style={{marginTop:8}} value={form.customPlan} onChange={e=>updField('customPlan',e.target.value)} placeholder="Plan-Name eingeben…"/>
+          )}
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>E-Mail / Account</div>
+          <input value={form.account} onChange={e=>updField('account',e.target.value)} placeholder="z.B. claude@webars.at"/>
+        </div>
+
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Notizen</div>
+          <textarea value={form.notes} onChange={e=>updField('notes',e.target.value)} placeholder="Wofür wird dieser Account genutzt?" style={{minHeight:70}}/>
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'space-between'}}>
+          {!isNew && onDelete ? (
+            <button className="btn btn-danger" onClick={()=>{if(confirm('Claude Konto wirklich löschen? Aufgaben bleiben erhalten.'))onDelete(form.id);}}><Icons.Trash/>Löschen</button>
+          ) : <div></div>}
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+            <button className="btn btn-primary" onClick={submit} disabled={!form.name.trim()}>{isNew?'Hinzufügen':'Speichern'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClaudeTaskModal({task, accounts, onSave, onClose, onDelete}){
+  const isNew = !task || !task.title;
+  const [form, setForm] = useState(task || {
+    id: uid(),
+    title: '',
+    description: '',
+    status: 'offen',
+    priority: 'normal',
+    dueDate: '',
+    assignedAccountIds: [],
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+  });
+  const updField = (k,v) => setForm(f=>({...f,[k]:v}));
+  const toggleAccount = (id) => {
+    const ids = form.assignedAccountIds || [];
+    if(ids.includes(id)) updField('assignedAccountIds', ids.filter(x=>x!==id));
+    else updField('assignedAccountIds', [...ids, id]);
+  };
+  const submit = () => {
+    if(!form.title.trim()) return;
+    const wasErledigt = task && task.status === 'erledigt';
+    const isErledigt = form.status === 'erledigt';
+    const completedAt = isErledigt && !wasErledigt ? new Date().toISOString() : (isErledigt ? form.completedAt : null);
+    onSave({...form, title:form.title.trim(), description:(form.description||'').trim(), completedAt});
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:600}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.01em'}}>{isNew?'Neue Aufgabe':'Aufgabe bearbeiten'}</h2>
+            <div style={{fontSize:12,color:'#A8A39D',marginTop:2}}>Aufgabe einem oder mehreren Claude-Konten zuweisen.</div>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Titel</div>
+          <input value={form.title} onChange={e=>updField('title',e.target.value)} placeholder="z.B. Newsletter texten, Lead-Recherche…" autoFocus/>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Beschreibung</div>
+          <textarea value={form.description||''} onChange={e=>updField('description',e.target.value)} placeholder="Details zur Aufgabe…" style={{minHeight:70}}/>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Status</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {TASK_STATUS.map(s=>{
+                const active = form.status === s.key;
+                return(<button key={s.key} onClick={()=>updField('status',s.key)} style={{padding:'7px 10px',borderRadius:9,fontSize:11.5,fontWeight:600,border:`1.5px solid ${active?s.color:'transparent'}`,background:active?s.bg:'#F5F3F0',color:active?s.color:'#6B6560',cursor:'pointer',transition:'all 0.15s'}}>{s.label}</button>);
+              })}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Priorität</div>
+            <div style={{display:'flex',gap:4}}>
+              {TASK_PRIORITY.map(p=>{
+                const active = form.priority === p.key;
+                return(<button key={p.key} onClick={()=>updField('priority',p.key)} style={{flex:1,padding:'7px 10px',borderRadius:9,fontSize:11.5,fontWeight:600,border:`1.5px solid ${active?p.color:'transparent'}`,background:active?p.bg:'#F5F3F0',color:active?p.color:'#6B6560',cursor:'pointer',transition:'all 0.15s'}}>{p.label}</button>);
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Fällig am (optional)</div>
+          <input type="date" value={form.dueDate||''} onChange={e=>updField('dueDate',e.target.value)}/>
+        </div>
+
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Zugewiesene Konten ({(form.assignedAccountIds||[]).length})</div>
+          {accounts.length === 0 ? (
+            <div style={{padding:14,background:'#FAFAF8',borderRadius:10,fontSize:12.5,color:'#A8A39D'}}>Noch keine Claude-Konten vorhanden. Lege erst ein Konto an.</div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:6,maxHeight:200,overflowY:'auto',padding:6,background:'#FAFAF8',borderRadius:10}}>
+              {accounts.map(a=>{
+                const checked = (form.assignedAccountIds||[]).includes(a.id);
+                return(
+                  <button key={a.id} onClick={()=>toggleAccount(a.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,border:checked?'1.5px solid #141210':'1.5px solid transparent',background:checked?'white':'transparent',cursor:'pointer',textAlign:'left',transition:'all 0.15s'}}>
+                    <div style={{width:26,height:26,borderRadius:6,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{a.avatar||'🤖'}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:'#141210',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.name}</div>
+                      <div style={{fontSize:10.5,color:'#A8A39D',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.plan}</div>
+                    </div>
+                    {checked && <span style={{color:'#141210',fontSize:14,fontWeight:700}}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'space-between'}}>
+          {!isNew && onDelete ? (
+            <button className="btn btn-danger" onClick={()=>{if(confirm('Aufgabe wirklich löschen?'))onDelete(form.id);}}><Icons.Trash/>Löschen</button>
+          ) : <div></div>}
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+            <button className="btn btn-primary" onClick={submit} disabled={!form.title.trim()}>{isNew?'Erstellen':'Speichern'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClaudeAccountDetail({account, tasks, accounts, onBack, onUpdateTasks, onEdit}){
+  const [taskModal, setTaskModal] = useState(null);
+  const statusMeta = AI_STATUS.find(s=>s.key===account.status) || AI_STATUS[0];
+
+  const accountTasks = tasks.filter(t => (t.assignedAccountIds||[]).includes(account.id));
+  const groupedByStatus = TASK_STATUS.map(s => ({
+    ...s,
+    tasks: accountTasks.filter(t => t.status === s.key)
+  }));
+
+  const saveTask = (task) => {
+    const exists = tasks.find(t=>t.id===task.id);
+    onUpdateTasks(exists ? tasks.map(t=>t.id===task.id?task:t) : [...tasks, task]);
+    setTaskModal(null);
+  };
+  const deleteTask = (id) => {
+    onUpdateTasks(tasks.filter(t=>t.id!==id));
+    setTaskModal(null);
+  };
+
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:28}}>
+      <button onClick={onBack} style={{background:'none',border:'none',color:'#6B6560',fontSize:13,cursor:'pointer',padding:'4px 0',marginBottom:16,display:'flex',alignItems:'center',gap:6,fontWeight:500}}>← Zurück zur Übersicht</button>
+
+      <div style={{background:'white',borderRadius:14,padding:24,marginBottom:20,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:18}}>
+          <div style={{width:64,height:64,borderRadius:14,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32,flexShrink:0}}>{account.avatar||'🤖'}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6,flexWrap:'wrap'}}>
+              <h1 style={{fontSize:22,fontWeight:800,letterSpacing:'-0.02em'}}>{account.name}</h1>
+              <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px 3px 7px',borderRadius:99,background:statusMeta.bg,fontSize:11.5,fontWeight:600,color:statusMeta.color}}>
+                <span style={{width:5,height:5,borderRadius:'50%',background:statusMeta.dot}}></span>{statusMeta.label}
+              </span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginTop:14}}>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Plan</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{account.plan||'—'}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Account</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{account.account||'—'}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Aufgaben</div>
+                <div style={{fontSize:13,color:'#141210',fontWeight:500}}>{accountTasks.length} ({accountTasks.filter(t=>t.status!=='erledigt').length} offen)</div>
+              </div>
+            </div>
+            {account.notes && (
+              <div style={{marginTop:16,padding:'12px 14px',background:'#FAFAF8',borderRadius:10,borderLeft:'3px solid #141210'}}>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:4}}>Notizen</div>
+                <div style={{fontSize:13.5,color:'#3F3A35',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{account.notes}</div>
+              </div>
+            )}
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onEdit}><Icons.Edit/>Bearbeiten</button>
+        </div>
+      </div>
+
+      <div style={{background:'white',borderRadius:14,padding:20,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <Icons.Check/>
+          <h2 style={{fontSize:14.5,fontWeight:700,letterSpacing:'-0.01em'}}>Aufgaben Dashboard</h2>
+          <button className="btn btn-primary btn-sm" style={{marginLeft:'auto'}} onClick={()=>setTaskModal({mode:'new',prefilledAccountIds:[account.id]})}><Icons.Plus/>Neue Aufgabe</button>
+        </div>
+
+        {accountTasks.length === 0 ? (
+          <div style={{textAlign:'center',padding:'40px 20px',color:'#C8C3BD'}}>
+            <div style={{fontSize:32,marginBottom:8,opacity:.4}}>📋</div>
+            <div style={{fontSize:14,fontWeight:600,color:'#C0BBB5'}}>Keine Aufgaben zugewiesen.</div>
+            <div style={{fontSize:12.5,color:'#C0BBB5',marginTop:4}}>Erstelle eine Aufgabe und weise sie diesem Konto zu.</div>
+          </div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+            {groupedByStatus.filter(g=>g.tasks.length>0).map(g => (
+              <div key={g.key} style={{background:'#FAFAF8',borderRadius:10,padding:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                  <span style={{width:6,height:6,borderRadius:'50%',background:g.dot}}></span>
+                  <span style={{fontSize:11,fontWeight:700,color:g.color,textTransform:'uppercase',letterSpacing:'0.06em'}}>{g.label}</span>
+                  <span style={{fontSize:11,color:'#A8A39D',marginLeft:'auto'}}>{g.tasks.length}</span>
+                </div>
+                {g.tasks.map(t => {
+                  const prio = TASK_PRIORITY.find(p=>p.key===t.priority) || TASK_PRIORITY[1];
+                  return(
+                    <button key={t.id} onClick={()=>setTaskModal({mode:'edit',task:t})} style={{display:'block',width:'100%',textAlign:'left',background:'white',border:'1px solid rgba(0,0,0,0.05)',borderRadius:8,padding:10,marginBottom:6,cursor:'pointer',transition:'all 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(0,0,0,0.15)'} onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(0,0,0,0.05)'}>
+                      <div style={{fontSize:13,fontWeight:600,color:'#141210',marginBottom:4}}>{t.title}</div>
+                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                        {t.priority !== 'normal' && <span style={{fontSize:10,padding:'1px 6px',borderRadius:99,background:prio.bg,color:prio.color,fontWeight:600}}>{prio.label}</span>}
+                        {t.dueDate && <span style={{fontSize:10.5,color:'#A8A39D'}}>📅 {new Date(t.dueDate).toLocaleDateString('de-DE')}</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {taskModal && taskModal.mode==='new' && (
+        <ClaudeTaskModal task={{
+          id: uid(), title: '', description: '', status: 'offen', priority: 'normal',
+          dueDate: '', assignedAccountIds: taskModal.prefilledAccountIds || [],
+          createdAt: new Date().toISOString(), completedAt: null,
+        }} accounts={accounts} onSave={saveTask} onClose={()=>setTaskModal(null)}/>
+      )}
+      {taskModal && taskModal.mode==='edit' && (
+        <ClaudeTaskModal task={taskModal.task} accounts={accounts} onSave={saveTask} onClose={()=>setTaskModal(null)} onDelete={deleteTask}/>
+      )}
+    </div>
+  );
+}
+
+function ClaudeAccountsView({accounts, tasks, onUpdateAccounts, onUpdateTasks, externalNewTrigger, onExternalNewHandled, externalNewTaskTrigger, onExternalNewTaskHandled}){
+  const [tab, setTab] = useState('konten');
+  const [accountModal, setAccountModal] = useState(null);
+  const [taskModal, setTaskModal] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+
+  useEffect(()=>{
+    if(externalNewTrigger){
+      setSelectedId(null);
+      setTab('konten');
+      setAccountModal('new');
+      onExternalNewHandled && onExternalNewHandled();
+    }
+  },[externalNewTrigger]);
+
+  useEffect(()=>{
+    if(externalNewTaskTrigger){
+      setSelectedId(null);
+      setTab('aufgaben');
+      setTaskModal({mode:'new'});
+      onExternalNewTaskHandled && onExternalNewTaskHandled();
+    }
+  },[externalNewTaskTrigger]);
+
+  const selected = selectedId ? accounts.find(a=>a.id===selectedId) : null;
+
+  const saveAccount = (acc) => {
+    const exists = accounts.find(a=>a.id===acc.id);
+    onUpdateAccounts(exists ? accounts.map(a=>a.id===acc.id?acc:a) : [...accounts, acc]);
+    setAccountModal(null);
+  };
+  const removeAccount = (id) => {
+    onUpdateAccounts(accounts.filter(a=>a.id!==id));
+    onUpdateTasks(tasks.map(t => ({...t, assignedAccountIds: (t.assignedAccountIds||[]).filter(x=>x!==id)})));
+    setAccountModal(null);
+    setSelectedId(null);
+  };
+
+  const saveTask = (task) => {
+    const exists = tasks.find(t=>t.id===task.id);
+    onUpdateTasks(exists ? tasks.map(t=>t.id===task.id?task:t) : [...tasks, task]);
+    setTaskModal(null);
+  };
+  const deleteTask = (id) => {
+    onUpdateTasks(tasks.filter(t=>t.id!==id));
+    setTaskModal(null);
+  };
+
+  if(selected){
+    return(<>
+      <ClaudeAccountDetail
+        account={selected}
+        tasks={tasks}
+        accounts={accounts}
+        onBack={()=>setSelectedId(null)}
+        onUpdateTasks={onUpdateTasks}
+        onEdit={()=>setAccountModal({edit:selected})}
+      />
+      {accountModal && accountModal.edit && <ClaudeAccountModal account={accountModal.edit} onSave={(acc)=>{saveAccount(acc);}} onClose={()=>setAccountModal(null)} onDelete={removeAccount}/>}
+    </>);
+  }
+
+  return(<>
+    <div style={{flex:1,overflowY:'auto',padding:28}}>
+      <div style={{display:'flex',gap:6,marginBottom:20,padding:4,background:'#F5F3F0',borderRadius:10,width:'fit-content'}}>
+        {[{key:'konten',label:`Konten (${accounts.length})`},{key:'aufgaben',label:`Aufgaben (${tasks.length})`}].map(t=>(
+          <button key={t.key} onClick={()=>setTab(t.key)} style={{padding:'7px 14px',borderRadius:7,border:'none',background:tab===t.key?'white':'transparent',color:tab===t.key?'#141210':'#6B6560',fontWeight:600,fontSize:13,cursor:'pointer',transition:'all 0.15s',boxShadow:tab===t.key?'0 1px 3px rgba(0,0,0,0.06)':'none'}}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab === 'konten' && (
+        accounts.length === 0 ? (
+          <div style={{textAlign:'center',padding:'80px 20px',color:'#C8C3BD'}}>
+            <div style={{fontSize:48,marginBottom:16,opacity:.6}}>✨</div>
+            <div style={{fontSize:17,fontWeight:700,color:'#3F3A35',marginBottom:6}}>Noch keine Claude Konten</div>
+            <div style={{fontSize:13,color:'#A8A39D',marginBottom:20,maxWidth:380,margin:'0 auto 20px'}}>Lege deine Claude-Accounts an und weise ihnen Aufgaben zu.</div>
+            <button className="btn btn-primary" onClick={()=>setAccountModal('new')}><Icons.Plus/>Erstes Konto hinzufügen</button>
+          </div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+            {accounts.map(a=>{
+              const statusMeta = AI_STATUS.find(s=>s.key===a.status) || AI_STATUS[0];
+              const accTasks = tasks.filter(t=>(t.assignedAccountIds||[]).includes(a.id));
+              const openCount = accTasks.filter(t=>t.status!=='erledigt').length;
+              return(
+                <button key={a.id} onClick={()=>setSelectedId(a.id)} style={{textAlign:'left',background:'white',borderRadius:14,padding:18,border:'1px solid rgba(0,0,0,0.07)',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',cursor:'pointer',transition:'all 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                  onMouseEnter={ev=>{ev.currentTarget.style.transform='translateY(-2px)';ev.currentTarget.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';}}
+                  onMouseLeave={ev=>{ev.currentTarget.style.transform='translateY(0)';ev.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:46,height:46,borderRadius:11,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>{a.avatar||'🤖'}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:15,fontWeight:700,color:'#141210',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.name}</div>
+                      <div style={{fontSize:11.5,color:'#6B6560',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.plan||'—'}</div>
+                    </div>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 7px 2px 6px',borderRadius:99,background:statusMeta.bg,fontSize:10.5,fontWeight:600,color:statusMeta.color,flexShrink:0}}>
+                      <span style={{width:4,height:4,borderRadius:'50%',background:statusMeta.dot}}></span>{statusMeta.label}
+                    </span>
+                  </div>
+                  {a.account && <div style={{fontSize:11.5,color:'#A8A39D',padding:'4px 8px',background:'#FAFAF8',borderRadius:6,fontFamily:'monospace',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.account}</div>}
+                  <div style={{display:'flex',gap:8,fontSize:11.5,color:'#6B6560',paddingTop:8,borderTop:'1px solid rgba(0,0,0,0.05)',marginTop:'auto'}}>
+                    <span><strong style={{color:'#141210'}}>{accTasks.length}</strong> Aufgaben</span>
+                    {openCount>0 && <span>· <strong style={{color:'#0369a1'}}>{openCount}</strong> offen</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {tab === 'aufgaben' && (
+        tasks.length === 0 ? (
+          <div style={{textAlign:'center',padding:'80px 20px',color:'#C8C3BD'}}>
+            <div style={{fontSize:48,marginBottom:16,opacity:.6}}>📋</div>
+            <div style={{fontSize:17,fontWeight:700,color:'#3F3A35',marginBottom:6}}>Noch keine Aufgaben</div>
+            <div style={{fontSize:13,color:'#A8A39D',marginBottom:20,maxWidth:380,margin:'0 auto 20px'}}>Erstelle Aufgaben und weise sie deinen Claude-Konten zu.</div>
+            <button className="btn btn-primary" onClick={()=>setTaskModal({mode:'new'})} disabled={accounts.length===0}><Icons.Plus/>Erste Aufgabe</button>
+            {accounts.length===0 && <div style={{fontSize:11.5,color:'#A8A39D',marginTop:8}}>Lege zuerst ein Claude-Konto an.</div>}
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {[...tasks].sort((a,b)=>{
+              if(a.status==='erledigt' && b.status!=='erledigt') return 1;
+              if(b.status==='erledigt' && a.status!=='erledigt') return -1;
+              const prioOrder = {hoch:0, normal:1, niedrig:2};
+              const ap = prioOrder[a.priority]||1, bp = prioOrder[b.priority]||1;
+              if(ap !== bp) return ap - bp;
+              return new Date(b.createdAt) - new Date(a.createdAt);
+            }).map(t=>{
+              const status = TASK_STATUS.find(s=>s.key===t.status) || TASK_STATUS[0];
+              const prio = TASK_PRIORITY.find(p=>p.key===t.priority) || TASK_PRIORITY[1];
+              const assigned = (t.assignedAccountIds||[]).map(id=>accounts.find(a=>a.id===id)).filter(Boolean);
+              const overdue = t.dueDate && t.status!=='erledigt' && t.dueDate < new Date().toISOString().slice(0,10);
+              return(
+                <button key={t.id} onClick={()=>setTaskModal({mode:'edit',task:t})} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 18px',background:'white',borderRadius:12,border:'1px solid rgba(0,0,0,0.07)',cursor:'pointer',textAlign:'left',transition:'all 0.15s',opacity:t.status==='erledigt'?0.6:1}}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.06)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px 3px 7px',borderRadius:99,background:status.bg,fontSize:11,fontWeight:600,color:status.color,flexShrink:0}}>
+                    <span style={{width:5,height:5,borderRadius:'50%',background:status.dot}}></span>{status.label}
+                  </span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:'#141210',textDecoration:t.status==='erledigt'?'line-through':'none'}}>{t.title}</div>
+                    <div style={{display:'flex',gap:10,fontSize:11.5,color:'#A8A39D',marginTop:4,alignItems:'center',flexWrap:'wrap'}}>
+                      {t.priority !== 'normal' && <span style={{padding:'1px 7px',borderRadius:99,background:prio.bg,color:prio.color,fontWeight:600}}>{prio.label}</span>}
+                      {t.dueDate && <span style={{color:overdue?'#dc2626':'#A8A39D',fontWeight:overdue?600:400}}>📅 {new Date(t.dueDate).toLocaleDateString('de-DE')}</span>}
+                      {t.description && <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:240}}>{t.description}</span>}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',flexShrink:0,alignItems:'center'}}>
+                    {assigned.slice(0,4).map((a,i)=>(
+                      <div key={a.id} title={a.name} style={{width:30,height:30,borderRadius:8,background:'#F5F3F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,border:'2px solid white',marginLeft:i===0?0:-8}}>{a.avatar||'🤖'}</div>
+                    ))}
+                    {assigned.length > 4 && <div style={{width:30,height:30,borderRadius:8,background:'#141210',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,border:'2px solid white',marginLeft:-8}}>+{assigned.length-4}</div>}
+                    {assigned.length === 0 && <span style={{fontSize:11,color:'#C0BBB5',fontStyle:'italic'}}>nicht zugewiesen</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+
+    {accountModal === 'new' && <ClaudeAccountModal onSave={saveAccount} onClose={()=>setAccountModal(null)}/>}
+    {accountModal && accountModal.edit && <ClaudeAccountModal account={accountModal.edit} onSave={saveAccount} onClose={()=>setAccountModal(null)} onDelete={removeAccount}/>}
+    {taskModal && taskModal.mode==='new' && (
+      <ClaudeTaskModal task={{
+        id: uid(), title: '', description: '', status: 'offen', priority: 'normal',
+        dueDate: '', assignedAccountIds: [], createdAt: new Date().toISOString(), completedAt: null,
+      }} accounts={accounts} onSave={saveTask} onClose={()=>setTaskModal(null)}/>
+    )}
+    {taskModal && taskModal.mode==='edit' && <ClaudeTaskModal task={taskModal.task} accounts={accounts} onSave={saveTask} onClose={()=>setTaskModal(null)} onDelete={deleteTask}/>}
   </>);
 }
 
@@ -2738,11 +3247,14 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     members: initialData.members || [],
     todos: initialData.todos || [],
     aiEmployees: initialData.aiEmployees || [],
+    claudeAccounts: initialData.claudeAccounts || [],
+    claudeTasks: initialData.claudeTasks || [],
     quotes: initialData.quotes || [],
     quoteSettings: {...DEFAULT_QUOTE_SETTINGS, ...(initialData.quoteSettings||{})},
   }));
   const TODOS_VIEW = '__todos__';
   const AI_VIEW = '__ai__';
+  const CLAUDE_VIEW = '__claude__';
   const QUOTES_VIEW = '__quotes__';
   const [activeId,setActiveId]=useState(initialData.sections[0]?.id);
   const [activeSubId,setActiveSubId]=useState(null);
@@ -2775,7 +3287,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     const fresh=await ghCheckForUpdates(cryptoKey);
     if(fresh){
       skipNextSaveRef.current=true;
-      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[]}));
+      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[]}));
       return true;
     }
     return false;
@@ -2862,6 +3374,16 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
               {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
             </button>
           );})()}
+          {/* Claude Konten */}
+          {(()=>{const isActive=activeId===CLAUDE_VIEW;const count=(state.claudeAccounts||[]).length;const openTasks=(state.claudeTasks||[]).filter(t=>t.status!=='erledigt').length;return(
+            <button onClick={()=>setActiveId(CLAUDE_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
+              onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,.05)';}}
+              onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:13,width:18,textAlign:'center',flexShrink:0,opacity:isActive?1:.5}}>✨</span>
+              <span style={{flex:1,fontSize:13.5,fontWeight:isActive?600:400,color:isActive?'white':'rgba(255,255,255,.5)',textAlign:'left',letterSpacing:'-0.01em'}}>Claude Konten</span>
+              {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}{openTasks>0?` · ${openTasks}`:''}</span>}
+            </button>
+          );})()}
           {/* Angebote */}
           {(()=>{const isActive=activeId===QUOTES_VIEW;const count=(state.quotes||[]).length;const open=(state.quotes||[]).filter(q=>q.status==='entwurf'||q.status==='gesendet').length;return(
             <button onClick={()=>setActiveId(QUOTES_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
@@ -2940,6 +3462,31 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             )}
           </div>
           <AIEmployeesView employees={state.aiEmployees||[]} onUpdate={aiEmployees=>upd({aiEmployees})} externalNewTrigger={modal==='addAI'} onExternalNewHandled={()=>setModal(null)}/>
+        </>) : activeId === CLAUDE_VIEW ? (<>
+          <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+            <div style={{flex:1}}>
+              <h1 style={{fontSize:18,fontWeight:800,letterSpacing:'-0.02em'}}>Claude Konten</h1>
+              <div style={{fontSize:12,color:'#B0ABA5',marginTop:2,display:'flex',gap:12,alignItems:'center'}}>
+                <span>{(state.claudeAccounts||[]).length} {(state.claudeAccounts||[]).length===1?'Konto':'Konten'}</span>
+                {(state.claudeTasks||[]).length>0&&<span>· {(state.claudeTasks||[]).length} Aufgaben</span>}
+                {(state.claudeTasks||[]).filter(t=>t.status!=='erledigt').length>0&&<span style={{color:'#0369a1',fontWeight:600}}>· {(state.claudeTasks||[]).filter(t=>t.status!=='erledigt').length} offen</span>}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-ghost" onClick={()=>setModal('addClaudeTask')} disabled={(state.claudeAccounts||[]).length===0}><Icons.Plus/>Aufgabe</button>
+              <button className="btn btn-primary" onClick={()=>setModal('addClaude')}><Icons.Plus/>Neues Konto</button>
+            </div>
+          </div>
+          <ClaudeAccountsView
+            accounts={state.claudeAccounts||[]}
+            tasks={state.claudeTasks||[]}
+            onUpdateAccounts={claudeAccounts=>upd({claudeAccounts})}
+            onUpdateTasks={claudeTasks=>upd({claudeTasks})}
+            externalNewTrigger={modal==='addClaude'}
+            onExternalNewHandled={()=>setModal(null)}
+            externalNewTaskTrigger={modal==='addClaudeTask'}
+            onExternalNewTaskHandled={()=>setModal(null)}
+          />
         </>) : activeId === QUOTES_VIEW ? (<>
           <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
             <div style={{flex:1}}>
@@ -3028,7 +3575,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
         if (existingData) {
           // Loaded from GitHub — overwrite local state
           skipNextSaveRef.current=true;
-          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[]});
+          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[], claudeAccounts:existingData.claudeAccounts||[], claudeTasks:existingData.claudeTasks||[]});
         } else {
           // No remote yet — push current local state
           await saveEncrypted(cryptoKey, state);
