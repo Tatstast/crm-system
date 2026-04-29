@@ -236,13 +236,15 @@ async function loadTOTPSecret(key) {
   try { return await aesDecrypt(key, JSON.parse(raw)); } catch(e) { return null; }
 }
 async function saveEncrypted(key, data) {
-  const encrypted = await aesEncrypt(key, data);
+  const dataWithTs = {...data, _savedAt: Date.now()};
+  const encrypted = await aesEncrypt(key, dataWithTs);
   localStorage.setItem(DATA_KEY, JSON.stringify(encrypted));
   // Also push to GitHub if configured (best effort, don't block local save)
   if (_ghSettings) {
     try {
       const newSha = await ghPushFile(_ghSettings.token, _ghSettings.repo, _ghSettings.path, encrypted, _ghSha);
       _ghSha = newSha;
+      localStorage.setItem(GH_SHA_KEY, newSha); // persist SHA so page reloads don't lose it
       _ghSyncState = {state:'ok', at:Date.now()};
       _notifySync && _notifySync();
     } catch(e) {
@@ -257,6 +259,7 @@ async function loadEncrypted(key) {
     try {
       const fetched = await ghFetchFile(_ghSettings.token, _ghSettings.repo, _ghSettings.path);
       _ghSha = fetched.sha;
+      localStorage.setItem(GH_SHA_KEY, fetched.sha); // persist SHA
       if (fetched.content) {
         // Cache locally for offline fallback
         localStorage.setItem(DATA_KEY, JSON.stringify(fetched.content));
@@ -267,6 +270,7 @@ async function loadEncrypted(key) {
     } catch(e) {
       _ghSyncState = {state:'error', message:e.message, at:Date.now()};
       _notifySync && _notifySync();
+      // GitHub offline — _ghSha already loaded from localStorage at startup, so SHA stays valid
     }
   }
   const raw = localStorage.getItem(DATA_KEY);
@@ -276,9 +280,11 @@ async function loadEncrypted(key) {
 
 // ─── GitHub Sync ────────────────────────────────────────────────
 const GH_SETTINGS_KEY = 'webars_gh_settings_v1';
+const GH_SHA_KEY = 'webars_gh_sha_v1';       // persisted SHA to survive page reloads
+const DATA_BACKUP_KEY = 'webars_data_backup_v1'; // emergency backup before cloud pull
 
 let _ghSettings = null;       // {token, repo, path}
-let _ghSha = null;            // last known sha for optimistic concurrency
+let _ghSha = localStorage.getItem(GH_SHA_KEY) || null; // persisted across reloads
 let _ghSyncState = {state:'idle'}; // {state: 'idle'|'ok'|'error', message, at}
 let _notifySync = null;       // hook for UI updates
 
@@ -382,10 +388,24 @@ async function ghCheckForUpdates(key) {
     if (!r.ok) return null;
     const j = await r.json();
     if (j.sha === _ghSha) return null; // no changes
-    // Changed! Fetch and decrypt
+    // SHA changed — decrypt and compare timestamps before overwriting
     const content = JSON.parse(b64decode(j.content));
     const decrypted = await aesDecrypt(key, content);
+    const cloudTs = decrypted._savedAt || 0;
+    // Read local timestamp to avoid overwriting newer local data with older cloud data
+    const localRaw = localStorage.getItem(DATA_KEY);
+    let localTs = 0;
+    if (localRaw) { try { const ld = await aesDecrypt(key, JSON.parse(localRaw)); localTs = ld?._savedAt||0; } catch(e){} }
+    if (cloudTs > 0 && cloudTs <= localTs) {
+      // Cloud version is older — update SHA so we stop re-checking, but don't overwrite state
+      _ghSha = j.sha;
+      localStorage.setItem(GH_SHA_KEY, j.sha);
+      return null;
+    }
+    // Cloud is newer (or no timestamp yet) — backup current local data first, then apply
+    if (localRaw) localStorage.setItem(DATA_BACKUP_KEY, localRaw);
     _ghSha = j.sha;
+    localStorage.setItem(GH_SHA_KEY, j.sha);
     localStorage.setItem(DATA_KEY, JSON.stringify(content));
     return decrypted;
   } catch(e) { return null; }
