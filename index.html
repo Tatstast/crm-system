@@ -3331,8 +3331,108 @@ function QuotesView({quotes, contacts, settings, onCreate, onOpen, onDelete, onS
 // ══════════════════════════════════════════════════════════════════
 //  INVOICES (Rechnungen)
 // ══════════════════════════════════════════════════════════════════
-function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quotes, onSave, onClose, onPreview}){
+function InvoiceSettingsModal({quoteSettings, invoiceSettings, onSave, onClose}){
+  const [qs, setQs] = useState({...DEFAULT_QUOTE_SETTINGS,...(quoteSettings||{})});
+  const [is_, setIs] = useState({...DEFAULT_INVOICE_SETTINGS,...(invoiceSettings||{})});
+  const uq=(k,v)=>setQs(p=>({...p,[k]:v}));
+  const ui=(k,v)=>setIs(p=>({...p,[k]:v}));
+  const SectionLabel = ({children}) => <div style={{fontSize:11,fontWeight:700,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8,marginTop:4}}>{children}</div>;
+  const uploadImg = (field, setter) => e => {
+    const f=e.target.files[0]; if(!f)return;
+    const r=new FileReader(); r.onload=ev=>setter(p=>({...p,[field]:ev.target.result})); r.readAsDataURL(f);
+  };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:640,maxHeight:'88vh',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700}}>Rechnungs-Vorlage</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Firma, Design und Standard-Werte für alle Rechnungen.</p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0,cursor:'pointer'}}><Icons.Close/></button>
+        </div>
+
+        <SectionLabel>Firmeninformationen</SectionLabel>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <input value={qs.companyName} onChange={e=>uq('companyName',e.target.value)} placeholder="Firmenname *"/>
+          <input value={qs.taxId} onChange={e=>uq('taxId',e.target.value)} placeholder="UID / USt-IdNr"/>
+        </div>
+        <textarea value={qs.companyAddress} onChange={e=>uq('companyAddress',e.target.value)} placeholder="Adresse (mehrzeilig — erscheint im Rechnungsfooter)" style={{minHeight:64,marginBottom:10,width:'100%',boxSizing:'border-box'}}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:18}}>
+          <input value={qs.companyEmail} onChange={e=>uq('companyEmail',e.target.value)} placeholder="E-Mail"/>
+          <input value={qs.companyPhone} onChange={e=>uq('companyPhone',e.target.value)} placeholder="Telefon"/>
+          <input value={qs.companyWebsite} onChange={e=>uq('companyWebsite',e.target.value)} placeholder="Website"/>
+        </div>
+
+        <SectionLabel>Bankverbindung</SectionLabel>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <input value={qs.bankName} onChange={e=>uq('bankName',e.target.value)} placeholder="Bank"/>
+          <input value={qs.bic} onChange={e=>uq('bic',e.target.value)} placeholder="BIC / SWIFT"/>
+        </div>
+        <input value={qs.iban} onChange={e=>uq('iban',e.target.value)} placeholder="IBAN" style={{marginBottom:18,fontFamily:'monospace'}}/>
+
+        <SectionLabel>Rechnungs-Einstellungen</SectionLabel>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Nummern-Präfix</div>
+            <input value={is_.numberPrefix} onChange={e=>ui('numberPrefix',e.target.value)} placeholder="RE"/>
+          </div>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Zahlungsziel (Tage)</div>
+            <input type="number" value={is_.defaultDueDays} onChange={e=>ui('defaultDueDays',Number(e.target.value))} min={1}/>
+          </div>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Standard USt %</div>
+            <input type="number" value={qs.taxRate} onChange={e=>uq('taxRate',Number(e.target.value))} min={0} max={100}/>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <div>
+            <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Währung</div>
+            <select value={qs.currency} onChange={e=>uq('currency',e.target.value)}>
+              <option value="EUR">EUR €</option><option value="CHF">CHF</option><option value="USD">USD $</option><option value="GBP">GBP £</option>
+            </select>
+          </div>
+        </div>
+        <div style={{fontSize:11.5,color:'#6B6560',marginBottom:4}}>Standard-Zahlungshinweis (erscheint auf jeder Rechnung)</div>
+        <textarea value={is_.paymentNote} onChange={e=>ui('paymentNote',e.target.value)} placeholder="z.B. Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer auf folgendes Konto." style={{minHeight:60,marginBottom:18,width:'100%',boxSizing:'border-box'}}/>
+
+        <SectionLabel>Design</SectionLabel>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <div style={{fontSize:12.5,color:'#6B6560',flex:1}}>Akzentfarbe (Titelzeile, Tabellenkopf, Gesamtbalken)</div>
+          <input type="color" value={qs.accentColor||'#141210'} onChange={e=>uq('accentColor',e.target.value)} style={{width:48,height:36,padding:2,cursor:'pointer',borderRadius:6}}/>
+          <input value={qs.accentColor||'#141210'} onChange={e=>uq('accentColor',e.target.value)} style={{width:90,fontFamily:'monospace',fontSize:12}}/>
+        </div>
+        {/* Logo */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12.5,color:'#6B6560',marginBottom:8}}>Firmen-Logo (erscheint oben links auf der Rechnung)</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {qs.logoUrl
+              ? <div style={{position:'relative',display:'inline-flex'}}>
+                  <img src={qs.logoUrl} style={{height:44,maxWidth:160,objectFit:'contain',border:'1.5px solid #E5E1DC',borderRadius:8,padding:'4px 8px',background:'white'}} alt="Logo"/>
+                  <button onClick={()=>uq('logoUrl','')} style={{position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#C0392B',border:'none',color:'white',cursor:'pointer',fontSize:11,lineHeight:'18px',textAlign:'center',padding:0}}>×</button>
+                </div>
+              : <div style={{width:160,height:44,border:'1.5px dashed #D8D3CE',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#C8C3BD',fontSize:12}}>Kein Logo</div>
+            }
+            <label style={{cursor:'pointer'}}>
+              <span className="btn btn-ghost btn-sm" style={{pointerEvents:'none'}}>Logo hochladen</span>
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={uploadImg('logoUrl',setQs)}/>
+            </label>
+          </div>
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={()=>{onSave(qs,is_);onClose();}}>Speichern</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quotes, onSave, onClose, onPreview, onCreateContact}){
   const [inv,setInv]=useState(invoice);
+  const [newCust,setNewCust]=useState(false);
+  const [nc,setNc]=useState({firma:'',ansprechpartner:'',email:'',telefon:'',address:''});
   const u=(k,v)=>setInv(p=>({...p,[k]:v}));
   const totals=quoteTotals(inv);
   const cur=quoteSettings?.currency||'EUR';
@@ -3343,6 +3443,15 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
   const removeItem=id=>u('items',inv.items.filter(it=>it.id!==id));
   const fromQuote=q=>setInv(p=>({...p,contactId:q.contactId,contactSnapshot:q.contactSnapshot,items:(q.items||[]).map(i=>({...i,id:uid()})),taxRate:q.taxRate,discount:q.discount,title:q.title,fromQuoteId:q.id}));
   const acceptedQ=(quotes||[]).filter(q=>q.status==='akzeptiert'||q.status==='gesendet');
+  const submitNewCust=()=>{
+    if(!nc.firma.trim())return;
+    const c={id:uid(),firma:nc.firma.trim(),ansprechpartner:nc.ansprechpartner.trim(),email:nc.email.trim(),telefon:nc.telefon.trim(),address:nc.address.trim(),sectionId:(contacts[0]?.sectionId||'hauptkunden'),subsectionId:null,status:'Aktiv',notizen:'',umsatz:'',reminders:[],activities:[],customValues:{}};
+    onCreateContact(c);
+    u('contactId',c.id);
+    u('contactSnapshot',{firma:c.firma,ansprechpartner:c.ansprechpartner,email:c.email,telefon:c.telefon});
+    setNc({firma:'',ansprechpartner:'',email:'',telefon:'',address:''});
+    setNewCust(false);
+  };
   return(
     <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{background:'white',borderRadius:18,width:'90vw',maxWidth:880,maxHeight:'93vh',overflow:'auto',display:'flex',flexDirection:'column'}}>
@@ -3368,11 +3477,28 @@ function InvoiceEditor({invoice, contacts, quoteSettings, invoiceSettings, quote
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,padding:28,overflowY:'auto',flex:1}}>
           <div style={{display:'flex',flexDirection:'column',gap:16}}>
             <div>
-              <label style={lbl}>Kunde</label>
+              <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
+                <label style={{...lbl,marginBottom:0,flex:1}}>Kunde</label>
+                <button onClick={()=>setNewCust(v=>!v)} style={{fontSize:11.5,color:'#3b82f6',background:'none',border:'1px solid #BFDBFE',borderRadius:6,padding:'2px 8px',cursor:'pointer',fontWeight:600}}>{newCust?'× Abbrechen':'+ Neuer Kunde'}</button>
+              </div>
+              {newCust ? (
+                <div style={{background:'#F0F7FF',borderRadius:10,padding:'12px 14px',border:'1.5px solid #BFDBFE',display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'#1d4ed8',marginBottom:2}}>Neuen Kunden anlegen</div>
+                  <input value={nc.firma} onChange={e=>setNc(p=>({...p,firma:e.target.value}))} placeholder="Firmenname *" style={{fontSize:13}}/>
+                  <input value={nc.ansprechpartner} onChange={e=>setNc(p=>({...p,ansprechpartner:e.target.value}))} placeholder="Ansprechpartner" style={{fontSize:13}}/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <input value={nc.email} onChange={e=>setNc(p=>({...p,email:e.target.value}))} placeholder="E-Mail" style={{fontSize:13}}/>
+                    <input value={nc.telefon} onChange={e=>setNc(p=>({...p,telefon:e.target.value}))} placeholder="Telefon" style={{fontSize:13}}/>
+                  </div>
+                  <textarea value={nc.address} onChange={e=>setNc(p=>({...p,address:e.target.value}))} placeholder="Adresse" rows={2} style={{fontSize:13,resize:'vertical'}}/>
+                  <button onClick={submitNewCust} className="btn btn-primary btn-sm" style={{alignSelf:'flex-start',marginTop:2}} disabled={!nc.firma.trim()}>Anlegen &amp; auswählen</button>
+                </div>
+              ) : (
               <select value={inv.contactId} onChange={e=>{const c=contacts.find(x=>x.id===e.target.value);u('contactId',e.target.value);if(c)u('contactSnapshot',{firma:c.firma,ansprechpartner:c.ansprechpartner||'',email:c.email||'',telefon:c.telefon||''});}} style={{width:'100%'}}>
                 <option value="">— Kunden wählen —</option>
                 {contacts.map(c=><option key={c.id} value={c.id}>{c.firma}</option>)}
               </select>
+              )}
             </div>
             {inv.contactSnapshot?.firma&&(
               <div style={{background:'#FAFAF8',borderRadius:10,padding:'12px 14px',fontSize:13,lineHeight:1.7,border:'1px solid #EEEAE5'}}>
@@ -4178,6 +4304,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
                 {(state.invoices||[]).filter(i=>i.status==='bezahlt').length>0&&<span style={{color:'#16a34a',fontWeight:600}}>· {(state.invoices||[]).filter(i=>i.status==='bezahlt').length} bezahlt</span>}
               </div>
             </div>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setModal('invoiceSettings')}><Icons.Field/>Vorlage</button>
           </div>
           <InvoicesView
             invoices={state.invoices||[]}
@@ -4278,6 +4405,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       onOpenQuote={(q)=>{setEditingQuote(q);setModal(null);}}
     />}
     {modal==='quoteSettings'&&<QuoteSettingsModal settings={state.quoteSettings} onSave={s=>upd({quoteSettings:s})} onClose={()=>setModal(null)}/>}
+    {modal==='invoiceSettings'&&<InvoiceSettingsModal quoteSettings={state.quoteSettings} invoiceSettings={state.invoiceSettings||DEFAULT_INVOICE_SETTINGS} onSave={(qs,is_)=>upd({quoteSettings:{...state.quoteSettings,...qs},invoiceSettings:{...state.invoiceSettings,...is_}})} onClose={()=>setModal(null)}/>}
     {modal==='tokenUpdate'&&<TokenUpdateModal cryptoKey={cryptoKey} onSaved={()=>setModal(null)} onClose={()=>setModal(null)}/>}
     {editingQuote && <QuoteEditor
       quote={editingQuote}
@@ -4307,6 +4435,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       quoteSettings={state.quoteSettings}
       invoiceSettings={state.invoiceSettings||DEFAULT_INVOICE_SETTINGS}
       quotes={state.quotes||[]}
+      onCreateContact={c=>upd({contacts:[...state.contacts,c]})}
       onSave={inv=>{
         const exists=(state.invoices||[]).find(i=>i.id===inv.id);
         upd({invoices:exists?(state.invoices||[]).map(i=>i.id===inv.id?inv:i):[...(state.invoices||[]),inv]});
