@@ -64,8 +64,8 @@
 
   /* ── PRINT VIEW (Quotes / Angebote) ── */
   .quote-print-page{background:#E8E4DF;padding:40px 20px;min-height:100vh;}
-  .quote-paper{background:white;width:210mm;min-height:297mm;margin:0 auto;padding:22mm 20mm;box-shadow:0 12px 40px rgba(0,0,0,0.12);font-family:'Plus Jakarta Sans',sans-serif;font-size:10.5pt;color:#141210;line-height:1.55;print-color-adjust:exact;-webkit-print-color-adjust:exact;}
-  .quote-paper h1,.quote-paper h2{margin:0;}
+  .quote-paper{background:white;width:210mm;margin:0 auto;padding:22mm 20mm;box-shadow:0 12px 40px rgba(0,0,0,0.12);font-family:'Plus Jakarta Sans',sans-serif;font-size:10.5pt;color:#141210;line-height:1.55;print-color-adjust:exact;-webkit-print-color-adjust:exact;}
+  .quote-paper h1,.quote-paper h2,.quote-paper h3{margin:0;}
   @media print{
     body{background:white!important;}
     .quote-print-page{background:white!important;padding:0!important;}
@@ -3075,9 +3075,6 @@ ${settings.companyName || ''}`;
             )}
           </div>
 
-          {/* ── SPACER ── */}
-          <div style={{height:'5mm'}}/>
-
           {/* ── BOTTOM META STRIP ── */}
           <div style={{display:'flex',gap:0,borderRadius:'2mm',overflow:'hidden',border:`1.5pt solid ${accent}`}}>
             <div style={{flex:1,padding:'3mm 5mm',borderRight:`1pt solid ${accent}`}}>
@@ -3095,11 +3092,8 @@ ${settings.companyName || ''}`;
           </div>
         </div>
 
-        {/* Page break for print */}
-        <div style={{pageBreakAfter:'always'}}></div>
-
         {/* === GREETING + INTRO === */}
-        <div style={{marginBottom:'6mm'}}>
+        <div style={{marginTop:'10mm',marginBottom:'6mm'}}>
           <div style={{fontSize:'10.5pt',marginBottom:'2mm',fontWeight:500}}>{greeting}</div>
           {quote.intro && <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.65,color:'#2F2A25'}}>{quote.intro}</div>}
         </div>
