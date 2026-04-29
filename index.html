@@ -3054,7 +3054,7 @@ ${settings.companyName || ''}`;
 
           {/* ── BRAND ROW (only when banner is shown — pairs with banner) ── */}
           {settings.bannerUrl && (
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',paddingBottom:'3mm',borderBottom:'0.5pt solid #E5E1DC',marginBottom:'14mm'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',paddingBottom:'2mm',borderBottom:'0.5pt solid #E5E1DC',marginBottom:'7mm'}}>
               <div style={{fontWeight:700,fontSize:'11pt',color:accent,letterSpacing:'-0.01em'}}>{settings.companyName || 'Firma'}</div>
               {settings.companyWebsite && (
                 <div style={{fontSize:'8.5pt',color:'#9A9590',letterSpacing:'0.02em'}}>{settings.companyWebsite}</div>
@@ -3064,31 +3064,31 @@ ${settings.companyName || ''}`;
 
           {/* ── HERO: client name + project (top-aligned, fixed rhythm) ── */}
           <div>
-            <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.18em',fontWeight:700,marginBottom:'4mm'}}>Für</div>
-            <h1 style={{fontSize:'30pt',fontWeight:800,color:accent,letterSpacing:'-0.03em',lineHeight:1.0,marginBottom:'8mm'}}>{quote.contactSnapshot.firma || '—'}</h1>
+            <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.18em',fontWeight:700,marginBottom:'2mm'}}>Für</div>
+            <h1 style={{fontSize:'28pt',fontWeight:800,color:accent,letterSpacing:'-0.03em',lineHeight:1.0,marginBottom:'5mm'}}>{quote.contactSnapshot.firma || '—'}</h1>
             {quote.title && (
-              <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'6mm',maxWidth:'88%'}}>
-                <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'3mm'}}>Projekt</div>
+              <div style={{borderTop:`2pt solid ${accent}`,paddingTop:'3mm',maxWidth:'88%'}}>
+                <div style={{fontSize:'8pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'2mm'}}>Projekt</div>
                 <div style={{fontSize:'17pt',fontWeight:700,color:'#141210',lineHeight:1.3,letterSpacing:'-0.01em'}}>{quote.title}</div>
               </div>
             )}
           </div>
 
           {/* ── SPACER (pushes meta strip to the bottom) ── */}
-          <div style={{flex:1,minHeight:'14mm'}}/>
+          <div style={{flex:1,minHeight:'6mm'}}/>
 
           {/* ── BOTTOM META STRIP ── */}
-          <div style={{display:'flex',gap:0,borderRadius:'3mm',overflow:'hidden',border:`1.5pt solid ${accent}`}}>
-            <div style={{flex:1,padding:'5mm 7mm',borderRight:`1pt solid ${accent}`}}>
-              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'2.5mm'}}>Datum</div>
-              <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.date)}</div>
+          <div style={{display:'flex',gap:0,borderRadius:'2mm',overflow:'hidden',border:`1.5pt solid ${accent}`}}>
+            <div style={{flex:1,padding:'3mm 5mm',borderRight:`1pt solid ${accent}`}}>
+              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1.5mm'}}>Datum</div>
+              <div style={{fontSize:'10pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.date)}</div>
             </div>
-            <div style={{flex:1,padding:'5mm 7mm',borderRight:`1pt solid ${accent}`}}>
-              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'2.5mm'}}>Gültig bis</div>
-              <div style={{fontSize:'10.5pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.validUntil)}</div>
+            <div style={{flex:1,padding:'3mm 5mm',borderRight:`1pt solid ${accent}`}}>
+              <div style={{fontSize:'7pt',color:'#9A9590',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1.5mm'}}>Gültig bis</div>
+              <div style={{fontSize:'10pt',fontWeight:700,color:'#141210'}}>{fmtD(quote.validUntil)}</div>
             </div>
-            <div style={{flex:1.5,padding:'5mm 7mm',background:accent}}>
-              <div style={{fontSize:'7pt',color:'rgba(255,255,255,0.65)',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'2.5mm'}}>Investition</div>
+            <div style={{flex:1.5,padding:'3mm 5mm',background:accent}}>
+              <div style={{fontSize:'7pt',color:'rgba(255,255,255,0.65)',textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:700,marginBottom:'1.5mm'}}>Investition</div>
               <div style={{fontSize:'14pt',fontWeight:800,color:'white',fontVariantNumeric:'tabular-nums',letterSpacing:'-0.02em'}}>{fmtMoney(totals.total,cur)}</div>
             </div>
           </div>
@@ -3098,26 +3098,26 @@ ${settings.companyName || ''}`;
         <div style={{pageBreakAfter:'always'}}></div>
 
         {/* === GREETING + INTRO === */}
-        <div style={{marginBottom:'12mm'}}>
-          <div style={{fontSize:'10.5pt',marginBottom:'5mm',fontWeight:500}}>{greeting}</div>
+        <div style={{marginBottom:'6mm'}}>
+          <div style={{fontSize:'10.5pt',marginBottom:'2mm',fontWeight:500}}>{greeting}</div>
           {quote.intro && <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.65,color:'#2F2A25'}}>{quote.intro}</div>}
         </div>
 
         {/* === LEISTUNGEN (Sectioned) === */}
-        <div style={{marginBottom:'12mm'}}>
-          <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'6mm'}}>
+        <div style={{marginBottom:'7mm'}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'4mm'}}>
             <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>01</span>
-            <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Was wir leisten</h2>
+            <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Was wir leisten</h2>
           </div>
           {sections.map((section, sIdx) => (
-            <div key={sIdx} style={{marginBottom: sIdx < sections.length-1 ? '7mm' : 0}}>
+            <div key={sIdx} style={{marginBottom: sIdx < sections.length-1 ? '4mm' : 0}}>
               {section.heading && (
-                <div style={{fontSize:'11pt',fontWeight:700,color:'#141210',marginBottom:'3mm',paddingBottom:'1.5mm',borderBottom:`1pt solid ${accent}`,letterSpacing:'-0.005em'}}>{section.heading}</div>
+                <div style={{fontSize:'10pt',fontWeight:700,color:'#141210',marginBottom:'2mm',paddingBottom:'1mm',borderBottom:`1pt solid ${accent}`,letterSpacing:'-0.005em'}}>{section.heading}</div>
               )}
               {section.items.map((it, idx) => {
                 const lineTotal = (Number(it.quantity)||0)*(Number(it.unitPrice)||0);
                 return(
-                  <div key={it.id} style={{display:'flex',gap:'6mm',padding:'4mm 0',borderTop:idx>0?'0.4pt solid #EFEBE6':'none',alignItems:'flex-start'}}>
+                  <div key={it.id} style={{display:'flex',gap:'5mm',padding:'2.5mm 0',borderTop:idx>0?'0.4pt solid #EFEBE6':'none',alignItems:'flex-start'}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',color:'#1F1B17',lineHeight:1.5,fontWeight:500}}>{it.description}</div>
                       {Number(it.quantity) > 1 && (
@@ -3133,12 +3133,12 @@ ${settings.companyName || ''}`;
         </div>
 
         {/* === INVESTITION (highlighted) === */}
-        <div style={{marginBottom:'12mm',padding:'7mm 8mm',background:'#FAF9F7',borderRadius:'2.5mm',borderLeft:`3pt solid ${accent}`}}>
-          <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'5mm'}}>
+        <div style={{marginBottom:'7mm',padding:'4mm 6mm',background:'#FAF9F7',borderRadius:'2mm',borderLeft:`3pt solid ${accent}`}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'3mm'}}>
             <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>02</span>
-            <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Investition</h2>
+            <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Investition</h2>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'2.5mm 6mm',fontSize:'10pt'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'2mm 5mm',fontSize:'9.5pt'}}>
             <div style={{color:'#5F5A55'}}>Zwischensumme (netto)</div>
             <div style={{fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{fmtMoney(totals.subtotal,cur)}</div>
             {totals.discount>0 && <>
@@ -3148,7 +3148,7 @@ ${settings.companyName || ''}`;
             <div style={{color:'#5F5A55'}}>USt {quote.taxRate}%</div>
             <div style={{fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{fmtMoney(totals.tax,cur)}</div>
           </div>
-          <div style={{borderTop:`1.5pt solid ${accent}`,marginTop:'4mm',paddingTop:'4mm',display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+          <div style={{borderTop:`1.5pt solid ${accent}`,marginTop:'2.5mm',paddingTop:'2.5mm',display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
             <div style={{fontSize:'11pt',fontWeight:700,color:accent}}>Gesamt</div>
             <div style={{fontSize:'18pt',fontWeight:800,fontVariantNumeric:'tabular-nums',color:accent,letterSpacing:'-0.02em'}}>{fmtMoney(totals.total,cur)}</div>
           </div>
@@ -3156,44 +3156,44 @@ ${settings.companyName || ''}`;
 
         {/* === NÄCHSTE SCHRITTE === */}
         {quote.nextSteps && (
-          <div style={{marginBottom:'12mm'}}>
-            <div style={{display:'flex',alignItems:'baseline',gap:'4mm',marginBottom:'5mm'}}>
+          <div style={{marginBottom:'6mm'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'3mm'}}>
               <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>03</span>
-              <h2 style={{fontSize:'15pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>So geht's weiter</h2>
+              <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>So geht's weiter</h2>
             </div>
             <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.65,color:'#2F2A25'}}>{quote.nextSteps}</div>
           </div>
         )}
 
         {/* === SCHLUSSWORTE === */}
-        <div style={{marginBottom:'10mm'}}>
-          <div style={{fontSize:'10.5pt',color:'#2F2A25',lineHeight:1.65,marginBottom:'6mm'}}>{quote.footer || settings.defaultFooter || 'Wir freuen uns auf Ihre Rückmeldung.'}</div>
-          <div style={{fontSize:'10.5pt',fontWeight:700,color:accent}}>{settings.companyName}</div>
-          {quote.contactSnapshot?.ansprechpartner && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'2mm'}}>Ihr Ansprechpartner: {quote.contactSnapshot.ansprechpartner}</div>}
+        <div style={{marginBottom:'5mm'}}>
+          <div style={{fontSize:'10pt',color:'#2F2A25',lineHeight:1.55,marginBottom:'3mm'}}>{quote.footer || settings.defaultFooter || 'Wir freuen uns auf Ihre Rückmeldung.'}</div>
+          <div style={{fontSize:'10pt',fontWeight:700,color:accent}}>{settings.companyName}</div>
+          {quote.contactSnapshot?.ansprechpartner && <div style={{fontSize:'9pt',color:'#7A7570',marginTop:'1.5mm'}}>Ihr Ansprechpartner: {quote.contactSnapshot.ansprechpartner}</div>}
         </div>
 
         {/* === FOOTER (bedingungen + meta) === */}
         {quote.terms && (
-          <div style={{marginBottom:'8mm',padding:'4mm 5mm',background:'#FAFAF8',borderRadius:'2mm',fontSize:'8.5pt',color:'#5F5A55',whiteSpace:'pre-line',lineHeight:1.55}}>
+          <div style={{marginBottom:'4mm',padding:'3mm 4mm',background:'#FAFAF8',borderRadius:'2mm',fontSize:'8pt',color:'#5F5A55',whiteSpace:'pre-line',lineHeight:1.5}}>
             {quote.terms}
           </div>
         )}
 
         {/* === COMPANY FOOTER STRIP === */}
-        <div style={{paddingTop:'4mm',borderTop:'0.5pt solid #E5E1DC',display:'flex',gap:'8mm',fontSize:'7.5pt',color:'#9A9590',lineHeight:1.6}}>
-          <div style={{flex:1,display:'flex',flexDirection:'column',gap:'1mm'}}>
-            <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'1mm'}}>{settings.companyName}</div>
+        <div style={{paddingTop:'3mm',borderTop:'0.5pt solid #E5E1DC',display:'flex',gap:'6mm',fontSize:'7pt',color:'#9A9590',lineHeight:1.5}}>
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:'0.5mm'}}>
+            <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'0.5mm'}}>{settings.companyName}</div>
             {settings.companyAddress && <div style={{whiteSpace:'pre-line'}}>{settings.companyAddress}</div>}
           </div>
-          <div style={{flex:1,display:'flex',flexDirection:'column',gap:'1mm'}}>
-            <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'1mm'}}>Kontakt</div>
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:'0.5mm'}}>
+            <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'0.5mm'}}>Kontakt</div>
             {settings.companyEmail && <div>{settings.companyEmail}</div>}
             {settings.companyPhone && <div>{settings.companyPhone}</div>}
             {settings.taxId && <div style={{marginTop:'1mm'}}>UID: {settings.taxId}</div>}
           </div>
           {(settings.iban || settings.bankName) && (
-            <div style={{flex:1,display:'flex',flexDirection:'column',gap:'1mm'}}>
-              <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'1mm'}}>Bankverbindung</div>
+            <div style={{flex:1,display:'flex',flexDirection:'column',gap:'0.5mm'}}>
+              <div style={{fontWeight:600,color:'#5F5A55',marginBottom:'0.5mm'}}>Bankverbindung</div>
               {settings.bankName && <div>{settings.bankName}</div>}
               {settings.iban && <div style={{fontFamily:'monospace'}}>{settings.iban}</div>}
               {settings.bic && <div style={{fontFamily:'monospace'}}>{settings.bic}</div>}
