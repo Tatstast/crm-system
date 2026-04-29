@@ -320,6 +320,11 @@ async function ghFetchFile(token, repo, path) {
     headers: {Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json'}
   });
   if (r.status === 404) return {content: null, sha: null};
+  if (r.status === 401 || r.status === 403) {
+    _ghSyncState = {state:'token_invalid', at:Date.now()};
+    _notifySync && _notifySync();
+    throw new Error('TOKEN_INVALID');
+  }
   if (!r.ok) throw new Error(`Sync-Fehler ${r.status}`);
   const j = await r.json();
   let content = null;
@@ -349,6 +354,11 @@ async function ghPushFile(token, repo, path, content, sha = null, message = 'Upd
     if (latestSha && latestSha !== sha) {
       throw new Error('CONFLICT'); // caller can decide how to handle
     }
+  }
+  if (r.status === 401 || r.status === 403) {
+    _ghSyncState = {state:'token_invalid', at:Date.now()};
+    _notifySync && _notifySync();
+    throw new Error('TOKEN_INVALID');
   }
   if (!r.ok) {
     const err = await r.json().catch(()=>({}));
@@ -2634,6 +2644,57 @@ function quoteTotals(quote) {
 }
 
 // ── Quote Settings Modal ─────────────────────────────────────────
+function TokenUpdateModal({cryptoKey, onSaved, onClose}){
+  const current = _ghSettings;
+  const [token, setToken] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [ok, setOk] = React.useState(false);
+
+  const save = async () => {
+    if(!token.trim()){setErr('Bitte neuen Token eingeben.');return;}
+    setBusy(true); setErr('');
+    try {
+      await ghValidateAccess(token.trim(), current.repo);
+      const newSettings = {...current, token: token.trim()};
+      await saveGithubSettings(cryptoKey, newSettings);
+      _ghSyncState = {state:'idle'};
+      setOk(true);
+      setTimeout(()=>{onSaved&&onSaved();onClose();}, 1200);
+    } catch(e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:460}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700}}>🔑 Token aktualisieren</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Neuen GitHub Token eingeben — Repo und Daten bleiben unverändert.</p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+        <div style={{background:'#F5F3F0',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12.5,color:'#5F5A55'}}>
+          <div style={{marginBottom:2}}><strong>Repo:</strong> {current?.repo}</div>
+          <div><strong>Pfad:</strong> {current?.path}</div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Neuer Token</label>
+          <input value={token} onChange={e=>setToken(e.target.value)} placeholder="github_pat_… oder ghp_…" style={{fontFamily:'monospace',fontSize:12}} autoFocus/>
+          <div style={{fontSize:11.5,color:'#A8A39D',marginTop:6}}>Erstellen unter github.com/settings/tokens · Berechtigungen: Contents + Actions read/write</div>
+        </div>
+        {err&&<div style={{fontSize:12.5,color:'#C0392B',padding:'8px 12px',background:'#FEF2F2',borderRadius:8,marginBottom:12,border:'1px solid #FECACA'}}>{err}</div>}
+        {ok&&<div style={{fontSize:12.5,color:'#16a34a',padding:'8px 12px',background:'#F0FDF4',borderRadius:8,marginBottom:12,border:'1px solid #BBF7D0'}}>✓ Token gespeichert — Sync wird fortgesetzt.</div>}
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy||!token.trim()||ok}>{busy?'Prüfe…':'Speichern'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QuoteSettingsModal({settings, onSave, onClose}){
   const [s, setS] = useState(settings || DEFAULT_QUOTE_SETTINGS);
   const u = (k,v)=>setS(p=>({...p,[k]:v}));
@@ -3552,6 +3613,11 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       <span style={{flex:1}}><strong>Cloud-Sync nicht eingerichtet</strong> — deine Daten liegen nur im Browser. Wenn du den Browser wechselst oder Cache leerst, sind sie weg.</span>
       <button onClick={()=>setModal('githubSync')} style={{background:'white',color:'#B91C1C',border:'none',borderRadius:6,padding:'5px 14px',fontWeight:700,fontSize:12.5,cursor:'pointer',flexShrink:0}}>Jetzt verbinden</button>
     </div>}
+    {cloudConnected&&sync.state==='token_invalid'&&<div style={{flexShrink:0,background:'#C05621',color:'white',padding:'9px 20px',display:'flex',alignItems:'center',gap:12,fontSize:13,fontWeight:500,zIndex:200}}>
+      <span style={{fontSize:16}}>🔑</span>
+      <span style={{flex:1}}><strong>GitHub Token ungültig oder abgelaufen</strong> — Cloud-Sync pausiert. Daten werden nur noch lokal gespeichert bis du den Token aktualisierst.</span>
+      <button onClick={()=>setModal('tokenUpdate')} style={{background:'white',color:'#C05621',border:'none',borderRadius:6,padding:'5px 14px',fontWeight:700,fontSize:12.5,cursor:'pointer',flexShrink:0}}>Token aktualisieren</button>
+    </div>}
     <div style={{display:'flex',flex:1,overflow:'hidden'}}>
       {/* SIDEBAR */}
       <aside style={{width:230,background:'#0F0E0C',display:'flex',flexDirection:'column',flexShrink:0}}>
@@ -3623,11 +3689,13 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             {icon:<Icons.Field/>,label:'Felder verwalten',action:()=>setModal('addField')},
             {icon:<Icons.Members/>,label:'Mitglieder',action:()=>setModal('members')},
             {icon:<Icons.Invite/>,label:'Einladungen',action:()=>setModal('invites')},
+            {icon:<span style={{fontSize:13}}>⚙</span>,label:'Einstellungen',action:()=>setModal('githubSync')},
             (()=>{
               const sync=getSyncState();
-              const dot = !cloudConnected?'#A8A39D':sync.state==='ok'?'#22c55e':sync.state==='error'?'#ef4444':'#f59e0b';
-              const status = !cloudConnected?'Cloud-Sync einrichten':sync.state==='ok'?'Cloud-Sync · live':sync.state==='error'?'Cloud-Sync · Fehler':'Cloud-Sync · verbunden';
-              return {icon:<span style={{position:'relative',display:'inline-flex'}}><Icons.Cloud/><span style={{position:'absolute',right:-2,bottom:-2,width:6,height:6,borderRadius:'50%',background:dot,border:'1.5px solid #0F0E0C'}}></span></span>,label:status,action:()=>setModal('githubSync')};
+              const dot = !cloudConnected?'#A8A39D':sync.state==='ok'?'#22c55e':sync.state==='token_invalid'?'#f97316':sync.state==='error'?'#ef4444':'#f59e0b';
+              const status = !cloudConnected?'Cloud-Sync einrichten':sync.state==='ok'?'Cloud-Sync · live':sync.state==='token_invalid'?'Token abgelaufen!':sync.state==='error'?'Cloud-Sync · Fehler':'Cloud-Sync · verbunden';
+              const action = sync.state==='token_invalid'?()=>setModal('tokenUpdate'):()=>setModal('githubSync');
+              return {icon:<span style={{position:'relative',display:'inline-flex'}}><Icons.Cloud/><span style={{position:'absolute',right:-2,bottom:-2,width:6,height:6,borderRadius:'50%',background:dot,border:'1.5px solid #0F0E0C'}}></span></span>,label:status,action};
             })(),
             {icon:<Icons.Lock/>,label:'Sperren',action:()=>setLocked(true)},
             {icon:<Icons.Logout/>,label:'Abmelden',action:()=>{if(window.confirm('Wirklich abmelden? Du musst dich danach neu einloggen.'))onLogout&&onLogout();},danger:true},
@@ -3802,6 +3870,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       onOpenQuote={(q)=>{setEditingQuote(q);setModal(null);}}
     />}
     {modal==='quoteSettings'&&<QuoteSettingsModal settings={state.quoteSettings} onSave={s=>upd({quoteSettings:s})} onClose={()=>setModal(null)}/>}
+    {modal==='tokenUpdate'&&<TokenUpdateModal cryptoKey={cryptoKey} onSaved={()=>setModal(null)} onClose={()=>setModal(null)}/>}
     {editingQuote && <QuoteEditor
       quote={editingQuote}
       contacts={state.contacts}
