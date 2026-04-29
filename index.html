@@ -3507,6 +3507,11 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     return()=>{window.removeEventListener('mousemove',bump);window.removeEventListener('keydown',bump);window.removeEventListener('click',bump);clearInterval(iv);};
   },[]);
 
+  // Auto-open Cloud-Sync modal once on first load if not connected
+  useEffect(()=>{
+    if(!hasGithubSettings()) setTimeout(()=>setModal('githubSync'), 600);
+  },[]);
+
   const upd=patch=>setState(s=>({...s,...patch}));
   const section=state.sections.find(s=>s.id===activeId)||state.sections[0];
 
@@ -3541,7 +3546,13 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
 
   return(<>
     {locked&&<LockOverlay onUnlock={(key,data)=>{setState(data);setLocked(false);lastActivityRef.current=Date.now();}}/>}
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',filter:locked?'blur(8px)':'none',pointerEvents:locked?'none':'auto',transition:'filter .3s'}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',filter:locked?'blur(8px)':'none',pointerEvents:locked?'none':'auto',transition:'filter .3s'}}>
+    {!cloudConnected&&<div style={{flexShrink:0,background:'#B91C1C',color:'white',padding:'9px 20px',display:'flex',alignItems:'center',gap:12,fontSize:13,fontWeight:500,zIndex:200}}>
+      <span style={{fontSize:16}}>⚠️</span>
+      <span style={{flex:1}}><strong>Cloud-Sync nicht eingerichtet</strong> — deine Daten liegen nur im Browser. Wenn du den Browser wechselst oder Cache leerst, sind sie weg.</span>
+      <button onClick={()=>setModal('githubSync')} style={{background:'white',color:'#B91C1C',border:'none',borderRadius:6,padding:'5px 14px',fontWeight:700,fontSize:12.5,cursor:'pointer',flexShrink:0}}>Jetzt verbinden</button>
+    </div>}
+    <div style={{display:'flex',flex:1,overflow:'hidden'}}>
       {/* SIDEBAR */}
       <aside style={{width:230,background:'#0F0E0C',display:'flex',flexDirection:'column',flexShrink:0}}>
         <div style={{padding:'22px 20px 20px',borderBottom:'1px solid rgba(255,255,255,.06)',display:'flex',alignItems:'center',gap:12}}>
@@ -3753,6 +3764,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
         </div>
         </>)}
       </main>
+    </div>
     </div>
     {(modal==='add'||modal==='edit')&&<ContactModal contact={modal==='edit'?selected:null} sections={state.sections} customFields={state.customFields} onSave={saveContact} onClose={()=>setModal(null)}/>}
     {modal==='delete'&&selected&&<ConfirmModal text={`"${selected.firma}" wirklich löschen?`} onConfirm={deleteContact} onCancel={()=>setModal(null)}/>}
