@@ -3613,7 +3613,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
       <span style={{flex:1}}><strong>Cloud-Sync nicht eingerichtet</strong> — deine Daten liegen nur im Browser. Wenn du den Browser wechselst oder Cache leerst, sind sie weg.</span>
       <button onClick={()=>setModal('githubSync')} style={{background:'white',color:'#B91C1C',border:'none',borderRadius:6,padding:'5px 14px',fontWeight:700,fontSize:12.5,cursor:'pointer',flexShrink:0}}>Jetzt verbinden</button>
     </div>}
-    {cloudConnected&&sync.state==='token_invalid'&&<div style={{flexShrink:0,background:'#C05621',color:'white',padding:'9px 20px',display:'flex',alignItems:'center',gap:12,fontSize:13,fontWeight:500,zIndex:200}}>
+    {cloudConnected&&getSyncState().state==='token_invalid'&&<div style={{flexShrink:0,background:'#C05621',color:'white',padding:'9px 20px',display:'flex',alignItems:'center',gap:12,fontSize:13,fontWeight:500,zIndex:200}}>
       <span style={{fontSize:16}}>🔑</span>
       <span style={{flex:1}}><strong>GitHub Token ungültig oder abgelaufen</strong> — Cloud-Sync pausiert. Daten werden nur noch lokal gespeichert bis du den Token aktualisierst.</span>
       <button onClick={()=>setModal('tokenUpdate')} style={{background:'white',color:'#C05621',border:'none',borderRadius:6,padding:'5px 14px',fontWeight:700,fontSize:12.5,cursor:'pointer',flexShrink:0}}>Token aktualisieren</button>
