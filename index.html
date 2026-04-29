@@ -3007,7 +3007,7 @@ ${settings.companyName || ''}`;
 
       <div className="quote-paper">
         {/* === COVER === */}
-        <div style={{minHeight:'240mm',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',flexDirection:'column'}}>
 
           {/* ── BANNER (full-bleed, escapes paper padding) ── */}
           {settings.bannerUrl ? (
@@ -3074,8 +3074,8 @@ ${settings.companyName || ''}`;
             )}
           </div>
 
-          {/* ── SPACER (pushes meta strip to the bottom) ── */}
-          <div style={{flex:1,minHeight:'6mm'}}/>
+          {/* ── SPACER ── */}
+          <div style={{height:'6mm'}}/>
 
           {/* ── BOTTOM META STRIP ── */}
           <div style={{display:'flex',gap:0,borderRadius:'2mm',overflow:'hidden',border:`1.5pt solid ${accent}`}}>
