@@ -66,11 +66,14 @@
   .quote-print-page{background:#E8E4DF;padding:40px 20px;min-height:100vh;}
   .quote-paper{background:white;width:210mm;margin:0 auto;padding:22mm 20mm;box-shadow:0 12px 40px rgba(0,0,0,0.12);font-family:'Plus Jakarta Sans',sans-serif;font-size:10.5pt;color:#141210;line-height:1.55;print-color-adjust:exact;-webkit-print-color-adjust:exact;}
   .quote-paper h1,.quote-paper h2,.quote-paper h3{margin:0;}
+  .quote-cover-break{display:none;}
   @media print{
     body{background:white!important;}
     .quote-print-page{background:white!important;padding:0!important;}
-    .quote-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:16mm 14mm!important;min-height:auto!important;}
+    .quote-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:16mm 14mm!important;}
     .quote-no-print{display:none!important;}
+    .quote-cover-break{display:block;break-after:page;page-break-after:always;}
+    .quote-section{break-inside:avoid;page-break-inside:avoid;}
     @page{size:A4;margin:0;}
   }
 </style>
@@ -3092,14 +3095,17 @@ ${settings.companyName || ''}`;
           </div>
         </div>
 
+        {/* Page break after cover — only active in print */}
+        <div className="quote-cover-break"/>
+
         {/* === GREETING + INTRO === */}
-        <div style={{marginTop:'10mm',marginBottom:'6mm'}}>
+        <div className="quote-section" style={{marginTop:'10mm',marginBottom:'6mm'}}>
           <div style={{fontSize:'10.5pt',marginBottom:'2mm',fontWeight:500}}>{greeting}</div>
           {quote.intro && <div style={{fontSize:'10.5pt',whiteSpace:'pre-line',lineHeight:1.65,color:'#2F2A25'}}>{quote.intro}</div>}
         </div>
 
         {/* === LEISTUNGEN (Sectioned) === */}
-        <div style={{marginBottom:'7mm'}}>
+        <div className="quote-section" style={{marginBottom:'7mm'}}>
           <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'4mm'}}>
             <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>01</span>
             <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Was wir leisten</h2>
@@ -3128,7 +3134,7 @@ ${settings.companyName || ''}`;
         </div>
 
         {/* === INVESTITION (highlighted) === */}
-        <div style={{marginBottom:'7mm',padding:'4mm 6mm',background:'#FAF9F7',borderRadius:'2mm',borderLeft:`3pt solid ${accent}`}}>
+        <div className="quote-section" style={{marginBottom:'7mm',padding:'4mm 6mm',background:'#FAF9F7',borderRadius:'2mm',borderLeft:`3pt solid ${accent}`}}>
           <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'3mm'}}>
             <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>02</span>
             <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>Investition</h2>
@@ -3151,7 +3157,7 @@ ${settings.companyName || ''}`;
 
         {/* === NÄCHSTE SCHRITTE === */}
         {quote.nextSteps && (
-          <div style={{marginBottom:'6mm'}}>
+          <div className="quote-section" style={{marginBottom:'6mm'}}>
             <div style={{display:'flex',alignItems:'baseline',gap:'3mm',marginBottom:'3mm'}}>
               <span style={{fontSize:'8pt',color:accent,textTransform:'uppercase',letterSpacing:'0.16em',fontWeight:700}}>03</span>
               <h2 style={{fontSize:'13pt',fontWeight:700,color:accent,letterSpacing:'-0.01em'}}>So geht's weiter</h2>
