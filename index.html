@@ -4018,29 +4018,39 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
   const [dragOver,setDragOver]=useState(false);
   const [contactMatch,setContactMatch]=useState(null);
   const [createContact,setCreateContact]=useState(true);
+  const fileInputRef=React.useRef(null);
   const upd=p=>setForm(f=>({...f,...p}));
   const updItem=(idx,p)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,...p}:it)}));
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}]}));
   const removeItem=idx=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
 
   const handleFile=async(file)=>{
-    if(!file)return;
+    if(!file){setParseErr('Keine Datei ausgewählt.');return;}
+    console.log('[Import] handleFile start:',file.name,file.type,file.size);
     setParsing(true);setParseErr('');setParsed(false);
     try{
-      let parsed;
-      if(file.type==='application/pdf'||file.name.endsWith('.pdf')){
+      let parsedData;
+      const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+      const isHtml=file.type==='text/html'||/\.html?$/i.test(file.name);
+      if(isPdf){
+        console.log('[Import] PDF erkannt, lade pdf.js...');
         const {full,leftCol}=await extractPdfData(file);
-        parsed=parseInvoiceText(full,leftCol,contacts);
-      } else if(file.type==='text/html'||file.name.endsWith('.html')||file.name.endsWith('.htm')){
+        console.log('[Import] PDF extrahiert, full length:',full.length);
+        parsedData=parseInvoiceText(full,leftCol,contacts);
+        console.log('[Import] geparst:',parsedData);
+      } else if(isHtml){
         const text=await file.text();
-        parsed=parseInvoiceHtml(text,contacts);
+        parsedData=parseInvoiceHtml(text,contacts);
       } else {
-        setParseErr('Bitte eine PDF- oder HTML-Datei hochladen.');
+        setParseErr('Bitte eine PDF- oder HTML-Datei hochladen. Erkannt: '+(file.type||file.name));
         setParsing(false);return;
       }
-      setForm(f=>({...blank,...parsed,status:f.status}));
+      setForm(f=>({...blank,...parsedData,status:f.status}));
       setParsed(true);
-    }catch(e){setParseErr('Fehler beim Lesen der Datei: '+e.message);}
+    }catch(e){
+      console.error('[Import] Fehler:',e);
+      setParseErr('Fehler: '+(e.message||e.toString())+' — siehe Konsole (F12) für Details.');
+    }
     setParsing(false);
   };
   const onDrop=e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);};
@@ -4081,41 +4091,35 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
         </div>
 
         {/* FILE UPLOAD ZONE */}
-        {(()=>{
-          const fileInputRef=React.useRef(null);
-          return(
-            <div
-              onDragEnter={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
-              onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
-              onDragLeave={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);}}
-              onDrop={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
-              onClick={()=>fileInputRef.current&&fileInputRef.current.click()}
-              style={{border:`2px dashed ${dragOver?'#141210':'#D5D0CB'}`,borderRadius:12,padding:'22px 20px',textAlign:'center',marginBottom:16,cursor:'pointer',background:dragOver?'#F5F3F0':'#FAFAF9',transition:'all .15s',userSelect:'none'}}>
-              <input ref={fileInputRef} type="file" accept=".pdf,.html,.htm" onChange={onFileInput} style={{display:'none'}}/>
-              <div style={{pointerEvents:'none'}}>
-                {parsing?(
-                  <div style={{color:'#A8A39D',fontSize:13.5}}>
-                    <div style={{fontSize:24,marginBottom:8}}>⏳</div>
-                    Rechnung wird eingelesen…
-                  </div>
-                ):parsed?(
-                  <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
-                    <div style={{fontSize:22,marginBottom:6}}>✓</div>
-                    {form.firma?`Kunde: ${form.firma}`:'Datei gelesen'}{form.number?` · ${form.number}`:''}
-                    {form.items.filter(i=>i.description).length>0&&<span> · {form.items.filter(i=>i.description).length} Position(en)</span>}
-                    <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:4}}>Prüfe die Felder unten und korrigiere falls nötig</div>
-                  </div>
-                ):(
-                  <div style={{color:'#A8A39D',fontSize:13.5}}>
-                    <div style={{fontSize:28,marginBottom:8}}>📄</div>
-                    <span style={{color:'#141210',fontWeight:600}}>PDF oder HTML</span> hier reinziehen oder klicken
-                    <div style={{fontSize:12,marginTop:4}}>Rechnungen die mit diesem CRM erstellt wurden werden automatisch erkannt</div>
-                  </div>
-                )}
-              </div>
+        <input ref={fileInputRef} type="file" accept=".pdf,.html,.htm" onChange={onFileInput} style={{display:'none'}}/>
+        <div
+          onDragEnter={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
+          onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
+          onDragLeave={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);}}
+          onDrop={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
+          style={{border:`2px dashed ${dragOver?'#141210':'#D5D0CB'}`,borderRadius:12,padding:'22px 20px',textAlign:'center',marginBottom:16,background:dragOver?'#F5F3F0':'#FAFAF9',transition:'all .15s'}}>
+          {parsing?(
+            <div style={{color:'#A8A39D',fontSize:13.5}}>
+              <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+              Rechnung wird eingelesen…
             </div>
-          );
-        })()}
+          ):parsed?(
+            <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
+              <div style={{fontSize:22,marginBottom:6}}>✓</div>
+              {form.firma?`Kunde: ${form.firma}`:'Datei gelesen'}{form.number?` · ${form.number}`:''}
+              {form.items.filter(i=>i.description).length>0&&<span> · {form.items.filter(i=>i.description).length} Position(en)</span>}
+              <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:6}}>Prüfe die Felder unten und korrigiere falls nötig</div>
+              <button className="btn btn-ghost btn-sm" onClick={()=>fileInputRef.current?.click()} style={{marginTop:10}}>Andere Datei wählen</button>
+            </div>
+          ):(
+            <div style={{color:'#A8A39D',fontSize:13.5}}>
+              <div style={{fontSize:28,marginBottom:8}}>📄</div>
+              <div style={{marginBottom:10}}><span style={{color:'#141210',fontWeight:600}}>PDF oder HTML</span> hier reinziehen</div>
+              <button className="btn btn-primary btn-sm" onClick={()=>fileInputRef.current?.click()}>Datei auswählen</button>
+              <div style={{fontSize:12,marginTop:10}}>Rechnungen die mit diesem CRM erstellt wurden werden automatisch erkannt</div>
+            </div>
+          )}
+        </div>
         {parseErr&&<div style={{marginBottom:14,padding:'10px 14px',background:'#FEF2F2',borderRadius:8,color:'#C0392B',fontSize:13}}>{parseErr}</div>}
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
@@ -4496,7 +4500,7 @@ function TokenEditModal({token, onSave, onClose}){
       <div className="modal-box" style={{width:480}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
           <h2 style={{fontSize:17,fontWeight:800}}>{token?'Token bearbeiten':'Neuer Token'}</h2>
-          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'#9CA3AF'}}><Icons.X/></button>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,cursor:'pointer',color:'#999',lineHeight:0}}><Icons.Close/></button>
         </div>
         <div style={{display:'grid',gap:14}}>
           <div>
