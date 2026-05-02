@@ -3873,50 +3873,124 @@ async function loadPdfJs(){
     document.head.appendChild(s);
   });
 }
-async function extractPdfText(file){
+async function extractPdfData(file){
   const lib=await loadPdfJs();
   const buf=await file.arrayBuffer();
   const pdf=await lib.getDocument({data:buf}).promise;
-  const pages=[];
+  let fullLines=[],leftLines=[];
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
+    const midX=vp.width/2;
     const content=await page.getTextContent();
-    const items=[...content.items].sort((a,b)=>{const dy=b.transform[5]-a.transform[5];return Math.abs(dy)>3?dy:a.transform[4]-b.transform[4];});
-    pages.push(items.map(i=>i.str).join(' '));
+    const raw=content.items.filter(i=>i.str&&i.str.trim());
+    // Group into rows by y-position (4pt tolerance)
+    const rows=[];
+    for(const item of raw){
+      const y=item.transform[5];
+      let row=rows.find(r=>Math.abs(r.y-y)<=4);
+      if(!row){row={y,items:[]};rows.push(row);}
+      row.items.push(item);
+    }
+    rows.sort((a,b)=>b.y-a.y);
+    for(const row of rows){
+      row.items.sort((a,b)=>a.transform[4]-b.transform[4]);
+      fullLines.push(row.items.map(i=>i.str).join(' '));
+      leftLines.push(row.items.filter(i=>i.transform[4]<midX).map(i=>i.str).join(' '));
+    }
   }
-  return pages.join('\n');
+  return {full:fullLines.join('\n'),leftCol:leftLines.join('\n')};
 }
-function parseDEDate(s){const m=s&&s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:''}
-function parseInvoiceText(text,existingContacts){
-  const norm=text.replace(/\s+/g,' ').trim();
+const _DE_MONTHS={januar:1,februar:2,märz:3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12};
+function parseDEDate(s){
+  if(!s)return'';
+  let m=s.match(/(\d{1,2})\.\s*([A-Za-zäöüÄÖÜ]+)\s+(\d{4})/);
+  if(m){const mo=_DE_MONTHS[m[2].toLowerCase()];if(mo)return`${m[3]}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return'';
+}
+function parseInvoiceText(full,leftCol,existingContacts){
+  const nfull=full.replace(/[–—]/g,'-');
+  const nleft=(leftCol||'').replace(/[–—]/g,'-');
   const res={number:'',date:'',dueDate:'',serviceDate:'',taxRate:20,discount:0,firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'',taxId:'',items:[]};
-  const numM=norm.match(/\b([A-ZÄÖÜ]{1,6}[-_]\d{4}[-_]\d{2,6})\b/);
-  if(numM)res.number=numM[1];
-  const ld=lbl=>{const m=norm.match(new RegExp(lbl+'[\\s:]*?(\\d{1,2}\\.\\d{1,2}\\.\\d{4})','i'));return m?parseDEDate(m[1]):'';};
-  res.date=ld('Ausstellungsdatum')||ld('Rechnungsdatum');
-  res.dueDate=ld('Fälligkeitsdatum')||ld('Zahlungsziel');
-  res.serviceDate=ld('Leistungszeitraum')||ld('Leistungsdatum');
-  const txM=norm.match(/(\d+)\s*%\s*(?:MwSt|USt)/i)||norm.match(/MwSt[^%\d]*?(\d+)\s*%/i);
+  const fullLines=nfull.split('\n').map(s=>s.trim()).filter(s=>s);
+  const leftLines=nleft.split('\n').map(s=>s.trim()).filter(s=>s);
+  const dateRx=/\d{1,2}\.\s*(?:[A-Za-zäöüÄÖÜ]+\s+\d{4}|\d{1,2}\.\d{4})/g;
+
+  // Meta strip: line with RECHNUNGSDATUM → values on next line
+  for(let i=0;i<fullLines.length;i++){
+    if(fullLines[i].toUpperCase().includes('RECHNUNGSDATUM')){
+      const val=fullLines[i+1]||'';
+      const dates=[...val.matchAll(dateRx)].map(m=>parseDEDate(m[0])).filter(d=>d);
+      if(dates[0])res.date=dates[0];
+      if(dates[1])res.serviceDate=dates[1];
+      if(dates[2])res.dueDate=dates[2];
+      const inv=val.match(/([A-Z]{1,6}-\d{4}-\d{2,6})/);
+      if(inv&&!res.number)res.number=inv[1];
+      break;
+    }
+  }
+  // Invoice number fallback
+  if(!res.number){
+    for(let i=0;i<fullLines.length;i++){
+      if(/RECHNUNGS.?NR/i.test(fullLines[i])){
+        const c=(fullLines[i]+' '+(fullLines[i+1]||'')).replace(/[–—]/g,'-');
+        const m=c.match(/([A-Z]{1,6}-\d{4}-\d{2,6})/);
+        if(m){res.number=m[1];break;}
+      }
+    }
+    if(!res.number){const m=nfull.match(/\b([A-Z]{1,6}-\d{4}-\d{2,6})\b/);if(m)res.number=m[1];}
+  }
+  // Due date fallback
+  if(!res.dueDate){
+    for(let i=0;i<fullLines.length;i++){
+      if(/F.LLIG\s*AM/i.test(fullLines[i])){
+        const c=fullLines[i]+' '+(fullLines[i+1]||'');
+        const dm=c.match(dateRx);if(dm)res.dueDate=parseDEDate(dm[0]);break;
+      }
+    }
+  }
+  // Tax rate
+  const txM=nfull.match(/USt\s*(\d+)\s*%/i)||nfull.match(/MwSt[^%\d]*?(\d+)\s*%/i)||nfull.match(/(\d+)\s*%\s*(?:MwSt|USt)/i);
   if(txM)res.taxRate=parseInt(txM[1]);
-  const uidM=norm.match(/(?:UID|USt-?Id|ATU)[:\s]*([A-Z]{2}\d{6,}|\d{8,})/i);
-  if(uidM)res.taxId=uidM[1];
-  const zipM=norm.match(/\b(\d{4,5})\s+([A-ZÄÖÜ][a-zäöüß][\w\säöüÄÖÜ]{1,30}?)(?:\s+(?:Österreich|Deutschland|Austria|Schweiz|Germany)|(?=\s+[A-ZÄÖÜ]))/);
-  if(zipM){res.zip=zipM[1];res.city=zipM[2].trim();}
-  const cntM=norm.match(/\b(Österreich|Deutschland|Schweiz|Austria|Germany|Switzerland)\b/);
-  if(cntM)res.country=cntM[1];
-  const stM=norm.match(/([A-ZÄÖÜ][a-zäöüßA-ZÄÖÜa-z\s-]{2,30}\s+\d+[a-z]?(?:\/\d+)?)(?=\s+\d{4,5}\s)/);
-  if(stM)res.address=stM[1].trim();
-  const emlM=norm.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);
-  if(emlM)res.email=emlM[0];
-  if(existingContacts){for(const c of existingContacts){if(c.firma&&c.firma.length>2&&norm.toLowerCase().includes(c.firma.toLowerCase())){res.firma=c.firma;break;}}}
-  const parseDec=s=>parseFloat(s.replace(/\./g,'').replace(',','.'))||0;
-  const itemRx=/([A-Za-zÄÖÜäöüß][^\n\d]{3,60}?)\s+(\d+(?:[.,]\d+)?)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/g;
-  let m;
-  while((m=itemRx.exec(norm))!==null){
-    const desc=m[1].trim();
-    if(/^(Netto|Brutto|Gesamt|MwSt|Summe|Subtotal|Total|Zwischen|Rabatt)/i.test(desc))continue;
-    const qty=parseDec(m[2]),price=parseDec(m[3]);
-    if(qty>0&&price>0)res.items.push({id:uid(),type:'item',description:desc,quantity:qty,unitPrice:price});
+  // Recipient from left column
+  let ei=-1;
+  for(let i=0;i<leftLines.length;i++){if(/RECHNUNGSEMPF/i.test(leftLines[i])){ei=i;break;}}
+  if(ei>=0){
+    for(let i=ei+1;i<Math.min(ei+12,leftLines.length);i++){
+      const l=leftLines[i];
+      if(!l||/^(NR\.|BESCHR|ZAHLUNGS|RECHNUNGS)/i.test(l))break;
+      if(!res.firma&&!/^UID/i.test(l)&&!/@/.test(l)&&!/^\+?\d/.test(l)&&l.length>2)res.firma=l;
+      else if(!res.address&&/[a-zäöü].*\s\d+[a-z]?\s*$/i.test(l))res.address=l;
+      else if(!res.zip&&/^\d{4,5}\s+\S/.test(l)){const zm=l.match(/^(\d{4,5})\s+(.+)/);if(zm){res.zip=zm[1];res.city=zm[2].replace(/\s*(Österreich|Deutschland|Schweiz|Austria|Germany).*/i,'').trim();}}
+      else if(!res.country&&/^(Österreich|Deutschland|Schweiz|Austria|Germany)/i.test(l))res.country=l;
+      else if(!res.taxId&&/^UID:/i.test(l))res.taxId=l.replace(/^UID:\s*/i,'').trim();
+      else if(!res.email&&/@/.test(l))res.email=l.trim();
+      else if(!res.telefon&&/^\+?\d[\d\s()-]{5,}$/.test(l))res.telefon=l.trim();
+    }
+  }
+  if(!res.email){const m=nfull.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);if(m)res.email=m[0];}
+  // Match existing contact
+  if(res.firma&&existingContacts){
+    for(const c of existingContacts){
+      if(c.firma&&c.firma.length>2&&(res.firma.toLowerCase().includes(c.firma.toLowerCase())||c.firma.toLowerCase().includes(res.firma.toLowerCase()))){res.firma=c.firma;break;}
+    }
+  }
+  // Line items
+  const parseDec=s=>parseFloat((s||'0').replace(/€/g,'').replace(/\./g,'').replace(',','.'))||0;
+  let inItems=false;
+  for(let i=0;i<fullLines.length;i++){
+    const l=fullLines[i];
+    if(/\bBESCHREIBUNG\b/i.test(l)&&(/\bEP\b|\bGP\b|\bMGE\b/i.test(l))){inItems=true;continue;}
+    if(inItems&&/^(Zwischensumme|Nettobetrag|GESAMT|Gesamt|USt\s*\d|MwSt\s*\d)/i.test(l))break;
+    if(!inItems)continue;
+    const m=l.match(/^(?:\d+\s+)?(.+?)\s+(\d+(?:[.,]\d+)?)\s+([\d.,]+)\s*€?\s+([\d.,]+)\s*€?\s*$/);
+    if(m){
+      const desc=m[1].trim(),qty=parseDec(m[2]),ep=parseDec(m[3]);
+      if(desc.length>=2&&qty>0&&ep>0&&!/^(Zwischensumme|Netto|Gesamt|MwSt|USt|Summe|Rabatt)/i.test(desc))
+        res.items.push({id:uid(),type:'item',description:desc,quantity:qty,unitPrice:ep});
+    }
   }
   if(res.items.length===0)res.items=[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}];
   return res;
@@ -3930,7 +4004,7 @@ function parseInvoiceHtml(html,existingContacts){
       return {number:inv.number||'',date:inv.date||'',dueDate:inv.dueDate||'',serviceDate:inv.serviceDate||'',taxRate:inv.taxRate||20,discount:inv.discount||0,firma:inv.contactSnapshot?.firma||'',ansprechpartner:inv.contactSnapshot?.ansprechpartner||'',email:inv.contactSnapshot?.email||'',telefon:inv.contactSnapshot?.telefon||'',address:inv.contactSnapshot?.address||'',zip:inv.contactSnapshot?.zip||'',city:inv.contactSnapshot?.city||'',country:inv.contactSnapshot?.country||'',taxId:inv.contactSnapshot?.taxId||'',items:inv.items||[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],notes:inv.notes||'',paymentNote:inv.paymentNote||''};
     }catch(e){}
   }
-  return parseInvoiceText(doc.body?.textContent||'',existingContacts);
+  return parseInvoiceText(doc.body?.textContent||'','',existingContacts);
 }
 
 // ── Invoice Import Modal ─────────────────────────────────────────
@@ -3955,8 +4029,8 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
     try{
       let parsed;
       if(file.type==='application/pdf'||file.name.endsWith('.pdf')){
-        const text=await extractPdfText(file);
-        parsed=parseInvoiceText(text,contacts);
+        const {full,leftCol}=await extractPdfData(file);
+        parsed=parseInvoiceText(full,leftCol,contacts);
       } else if(file.type==='text/html'||file.name.endsWith('.html')||file.name.endsWith('.htm')){
         const text=await file.text();
         parsed=parseInvoiceHtml(text,contacts);
