@@ -3792,6 +3792,8 @@ function InvoicePreview({invoice, settings, invoiceSettings, onClose}){
             <div style={{marginTop:'1.5mm',fontSize:'7.5pt',color:'#9A9590'}}>Zahlungsziel: {fmtD(invoice.dueDate)}</div>
           </div>
         )}
+        {/* hidden data island for HTML re-import */}
+        <div id="crm-invoice-data" style={{display:'none'}} data-json={btoa(unescape(encodeURIComponent(JSON.stringify(invoice))))}></div>
         {/* LEGAL NOTE */}
         <div style={{marginBottom:'3mm',fontSize:'7.5pt',color:'#6B6560',lineHeight:1.5,fontStyle:'italic'}}>
           Diese Rechnung wurde elektronisch erstellt und ist auch ohne Unterschrift gültig.
@@ -3860,21 +3862,115 @@ function SnapshotRestoreModal({cryptoKey, onRestore, onClose}){
   );
 }
 
+// ── Invoice File Parsing ─────────────────────────────────────────
+async function loadPdfJs(){
+  if(window.pdfjsLib)return window.pdfjsLib;
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';resolve(window.pdfjsLib);};
+    s.onerror=()=>reject(new Error('PDF.js konnte nicht geladen werden.'));
+    document.head.appendChild(s);
+  });
+}
+async function extractPdfText(file){
+  const lib=await loadPdfJs();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  const pages=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    const items=[...content.items].sort((a,b)=>{const dy=b.transform[5]-a.transform[5];return Math.abs(dy)>3?dy:a.transform[4]-b.transform[4];});
+    pages.push(items.map(i=>i.str).join(' '));
+  }
+  return pages.join('\n');
+}
+function parseDEDate(s){const m=s&&s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:''}
+function parseInvoiceText(text,existingContacts){
+  const norm=text.replace(/\s+/g,' ').trim();
+  const res={number:'',date:'',dueDate:'',serviceDate:'',taxRate:20,discount:0,firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'',taxId:'',items:[]};
+  const numM=norm.match(/\b([A-ZÄÖÜ]{1,6}[-_]\d{4}[-_]\d{2,6})\b/);
+  if(numM)res.number=numM[1];
+  const ld=lbl=>{const m=norm.match(new RegExp(lbl+'[\\s:]*?(\\d{1,2}\\.\\d{1,2}\\.\\d{4})','i'));return m?parseDEDate(m[1]):'';};
+  res.date=ld('Ausstellungsdatum')||ld('Rechnungsdatum');
+  res.dueDate=ld('Fälligkeitsdatum')||ld('Zahlungsziel');
+  res.serviceDate=ld('Leistungszeitraum')||ld('Leistungsdatum');
+  const txM=norm.match(/(\d+)\s*%\s*(?:MwSt|USt)/i)||norm.match(/MwSt[^%\d]*?(\d+)\s*%/i);
+  if(txM)res.taxRate=parseInt(txM[1]);
+  const uidM=norm.match(/(?:UID|USt-?Id|ATU)[:\s]*([A-Z]{2}\d{6,}|\d{8,})/i);
+  if(uidM)res.taxId=uidM[1];
+  const zipM=norm.match(/\b(\d{4,5})\s+([A-ZÄÖÜ][a-zäöüß][\w\säöüÄÖÜ]{1,30}?)(?:\s+(?:Österreich|Deutschland|Austria|Schweiz|Germany)|(?=\s+[A-ZÄÖÜ]))/);
+  if(zipM){res.zip=zipM[1];res.city=zipM[2].trim();}
+  const cntM=norm.match(/\b(Österreich|Deutschland|Schweiz|Austria|Germany|Switzerland)\b/);
+  if(cntM)res.country=cntM[1];
+  const stM=norm.match(/([A-ZÄÖÜ][a-zäöüßA-ZÄÖÜa-z\s-]{2,30}\s+\d+[a-z]?(?:\/\d+)?)(?=\s+\d{4,5}\s)/);
+  if(stM)res.address=stM[1].trim();
+  const emlM=norm.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);
+  if(emlM)res.email=emlM[0];
+  if(existingContacts){for(const c of existingContacts){if(c.firma&&c.firma.length>2&&norm.toLowerCase().includes(c.firma.toLowerCase())){res.firma=c.firma;break;}}}
+  const parseDec=s=>parseFloat(s.replace(/\./g,'').replace(',','.'))||0;
+  const itemRx=/([A-Za-zÄÖÜäöüß][^\n\d]{3,60}?)\s+(\d+(?:[.,]\d+)?)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/g;
+  let m;
+  while((m=itemRx.exec(norm))!==null){
+    const desc=m[1].trim();
+    if(/^(Netto|Brutto|Gesamt|MwSt|Summe|Subtotal|Total|Zwischen|Rabatt)/i.test(desc))continue;
+    const qty=parseDec(m[2]),price=parseDec(m[3]);
+    if(qty>0&&price>0)res.items.push({id:uid(),type:'item',description:desc,quantity:qty,unitPrice:price});
+  }
+  if(res.items.length===0)res.items=[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}];
+  return res;
+}
+function parseInvoiceHtml(html,existingContacts){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const island=doc.getElementById('crm-invoice-data');
+  if(island&&island.dataset.json){
+    try{
+      const inv=JSON.parse(decodeURIComponent(escape(atob(island.dataset.json))));
+      return {number:inv.number||'',date:inv.date||'',dueDate:inv.dueDate||'',serviceDate:inv.serviceDate||'',taxRate:inv.taxRate||20,discount:inv.discount||0,firma:inv.contactSnapshot?.firma||'',ansprechpartner:inv.contactSnapshot?.ansprechpartner||'',email:inv.contactSnapshot?.email||'',telefon:inv.contactSnapshot?.telefon||'',address:inv.contactSnapshot?.address||'',zip:inv.contactSnapshot?.zip||'',city:inv.contactSnapshot?.city||'',country:inv.contactSnapshot?.country||'',taxId:inv.contactSnapshot?.taxId||'',items:inv.items||[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],notes:inv.notes||'',paymentNote:inv.paymentNote||''};
+    }catch(e){}
+  }
+  return parseInvoiceText(doc.body?.textContent||'',existingContacts);
+}
+
 // ── Invoice Import Modal ─────────────────────────────────────────
 function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport, onClose}){
   const cur=quoteSettings?.currency||'EUR';
-  const [form,setForm]=useState({
-    number:'',date:new Date().toISOString().slice(0,10),dueDate:'',serviceDate:'',status:'bezahlt',
-    firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:'',
-    items:[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],
-    taxRate:quoteSettings?.taxRate||20,discount:0,notes:'',paymentNote:invoiceSettings?.paymentNote||''
-  });
+  const blank={number:'',date:new Date().toISOString().slice(0,10),dueDate:'',serviceDate:'',status:'bezahlt',firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:'',items:[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],taxRate:quoteSettings?.taxRate||20,discount:0,notes:'',paymentNote:invoiceSettings?.paymentNote||''};
+  const [form,setForm]=useState(blank);
+  const [parsing,setParsing]=useState(false);
+  const [parseErr,setParseErr]=useState('');
+  const [parsed,setParsed]=useState(false);
+  const [dragOver,setDragOver]=useState(false);
   const [contactMatch,setContactMatch]=useState(null);
   const [createContact,setCreateContact]=useState(true);
   const upd=p=>setForm(f=>({...f,...p}));
   const updItem=(idx,p)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,...p}:it)}));
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}]}));
   const removeItem=idx=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
+
+  const handleFile=async(file)=>{
+    if(!file)return;
+    setParsing(true);setParseErr('');setParsed(false);
+    try{
+      let parsed;
+      if(file.type==='application/pdf'||file.name.endsWith('.pdf')){
+        const text=await extractPdfText(file);
+        parsed=parseInvoiceText(text,contacts);
+      } else if(file.type==='text/html'||file.name.endsWith('.html')||file.name.endsWith('.htm')){
+        const text=await file.text();
+        parsed=parseInvoiceHtml(text,contacts);
+      } else {
+        setParseErr('Bitte eine PDF- oder HTML-Datei hochladen.');
+        setParsing(false);return;
+      }
+      setForm(f=>({...blank,...parsed,status:f.status}));
+      setParsed(true);
+    }catch(e){setParseErr('Fehler beim Lesen der Datei: '+e.message);}
+    setParsing(false);
+  };
+  const onDrop=e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);};
+  const onFileInput=e=>handleFile(e.target.files[0]);
 
   React.useEffect(()=>{
     if(!form.firma){setContactMatch(null);return;}
@@ -3903,12 +3999,38 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
   const lbl={fontSize:12,fontWeight:600,color:'#5F5A55',marginBottom:4,display:'block'};
   return(
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:660,maxHeight:'90vh',overflowY:'auto'}}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:660,maxHeight:'92vh',overflowY:'auto'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
           <div><h2 style={{fontSize:17,fontWeight:700}}>📥 Rechnung importieren</h2>
-          <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Rechnung manuell erfassen — Kunde wird automatisch erkannt oder neu angelegt.</p></div>
+          <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>PDF oder HTML hochladen — Daten werden automatisch erkannt.</p></div>
           <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0,flexShrink:0}}><Icons.Close/></button>
         </div>
+
+        {/* FILE UPLOAD ZONE */}
+        <label onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
+          style={{display:'block',border:`2px dashed ${dragOver?'#141210':'#D5D0CB'}`,borderRadius:12,padding:'22px 20px',textAlign:'center',marginBottom:16,cursor:'pointer',background:dragOver?'#F5F3F0':'#FAFAF9',transition:'all .15s'}}>
+          <input type="file" accept=".pdf,.html,.htm" onChange={onFileInput} style={{display:'none'}}/>
+          {parsing?(
+            <div style={{color:'#A8A39D',fontSize:13.5}}>
+              <div style={{fontSize:24,marginBottom:8,animation:'spin 1s linear infinite'}}>⏳</div>
+              Rechnung wird eingelesen…
+            </div>
+          ):parsed?(
+            <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
+              <div style={{fontSize:22,marginBottom:6}}>✓</div>
+              Daten erkannt — bitte unten prüfen und bei Bedarf korrigieren
+              <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:4}}>Andere Datei hochladen um zu überschreiben</div>
+            </div>
+          ):(
+            <div style={{color:'#A8A39D',fontSize:13.5}}>
+              <div style={{fontSize:28,marginBottom:8}}>📄</div>
+              <span style={{color:'#141210',fontWeight:600}}>PDF oder HTML</span> hier reinziehen oder klicken
+              <div style={{fontSize:12,marginTop:4}}>Rechnungen die mit diesem CRM erstellt wurden werden automatisch erkannt</div>
+            </div>
+          )}
+        </label>
+        {parseErr&&<div style={{marginBottom:14,padding:'10px 14px',background:'#FEF2F2',borderRadius:8,color:'#C0392B',fontSize:13}}>{parseErr}</div>}
+
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
           <div><label style={lbl}>Rechnungsnummer</label><input value={form.number} onChange={e=>upd({number:e.target.value})} placeholder={nextInvoiceNumber(invoiceSettings||{})}/></div>
           <div><label style={lbl}>Datum</label><input type="date" value={form.date} onChange={e=>upd({date:e.target.value})}/></div>
