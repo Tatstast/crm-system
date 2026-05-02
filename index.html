@@ -583,7 +583,7 @@ const DEFAULT_INVOICE_SETTINGS = {
   defaultDueDays:14,
   paymentNote:'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer auf folgendes Konto.',
 };
-const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS,invoices:[],invoiceSettings:DEFAULT_INVOICE_SETTINGS};
+const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS,invoices:[],invoiceSettings:DEFAULT_INVOICE_SETTINGS,tokens:[]};
 
 const lbl = {display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'};
 
@@ -3867,8 +3867,8 @@ async function loadPdfJs(){
   if(window.pdfjsLib)return window.pdfjsLib;
   return new Promise((resolve,reject)=>{
     const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';resolve(window.pdfjsLib);};
+    s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/legacy/build/pdf.min.js';
+    s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/legacy/build/pdf.worker.min.js';resolve(window.pdfjsLib);};
     s.onerror=()=>reject(new Error('PDF.js konnte nicht geladen werden.'));
     document.head.appendChild(s);
   });
@@ -4058,7 +4058,7 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
 
   const totals=quoteTotals(form);
   const doImport=()=>{
-    if(!form.firma.trim()){return;}
+    if(!form.number.trim()&&!form.firma.trim()&&form.items.every(i=>!i.description.trim())){return;}
     const snap={firma:form.firma,ansprechpartner:form.ansprechpartner,email:form.email,telefon:form.telefon,address:form.address,zip:form.zip,city:form.city,country:form.country,taxId:form.taxId};
     let contactId=contactMatch?.id||'';
     let newContact=null;
@@ -4081,28 +4081,41 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
         </div>
 
         {/* FILE UPLOAD ZONE */}
-        <label onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
-          style={{display:'block',border:`2px dashed ${dragOver?'#141210':'#D5D0CB'}`,borderRadius:12,padding:'22px 20px',textAlign:'center',marginBottom:16,cursor:'pointer',background:dragOver?'#F5F3F0':'#FAFAF9',transition:'all .15s'}}>
-          <input type="file" accept=".pdf,.html,.htm" onChange={onFileInput} style={{display:'none'}}/>
-          {parsing?(
-            <div style={{color:'#A8A39D',fontSize:13.5}}>
-              <div style={{fontSize:24,marginBottom:8,animation:'spin 1s linear infinite'}}>⏳</div>
-              Rechnung wird eingelesen…
+        {(()=>{
+          const fileInputRef=React.useRef(null);
+          return(
+            <div
+              onDragEnter={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
+              onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}}
+              onDragLeave={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);}}
+              onDrop={e=>{e.preventDefault();e.stopPropagation();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
+              onClick={()=>fileInputRef.current&&fileInputRef.current.click()}
+              style={{border:`2px dashed ${dragOver?'#141210':'#D5D0CB'}`,borderRadius:12,padding:'22px 20px',textAlign:'center',marginBottom:16,cursor:'pointer',background:dragOver?'#F5F3F0':'#FAFAF9',transition:'all .15s',userSelect:'none'}}>
+              <input ref={fileInputRef} type="file" accept=".pdf,.html,.htm" onChange={onFileInput} style={{display:'none'}}/>
+              <div style={{pointerEvents:'none'}}>
+                {parsing?(
+                  <div style={{color:'#A8A39D',fontSize:13.5}}>
+                    <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+                    Rechnung wird eingelesen…
+                  </div>
+                ):parsed?(
+                  <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
+                    <div style={{fontSize:22,marginBottom:6}}>✓</div>
+                    {form.firma?`Kunde: ${form.firma}`:'Datei gelesen'}{form.number?` · ${form.number}`:''}
+                    {form.items.filter(i=>i.description).length>0&&<span> · {form.items.filter(i=>i.description).length} Position(en)</span>}
+                    <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:4}}>Prüfe die Felder unten und korrigiere falls nötig</div>
+                  </div>
+                ):(
+                  <div style={{color:'#A8A39D',fontSize:13.5}}>
+                    <div style={{fontSize:28,marginBottom:8}}>📄</div>
+                    <span style={{color:'#141210',fontWeight:600}}>PDF oder HTML</span> hier reinziehen oder klicken
+                    <div style={{fontSize:12,marginTop:4}}>Rechnungen die mit diesem CRM erstellt wurden werden automatisch erkannt</div>
+                  </div>
+                )}
+              </div>
             </div>
-          ):parsed?(
-            <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
-              <div style={{fontSize:22,marginBottom:6}}>✓</div>
-              Daten erkannt — bitte unten prüfen und bei Bedarf korrigieren
-              <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:4}}>Andere Datei hochladen um zu überschreiben</div>
-            </div>
-          ):(
-            <div style={{color:'#A8A39D',fontSize:13.5}}>
-              <div style={{fontSize:28,marginBottom:8}}>📄</div>
-              <span style={{color:'#141210',fontWeight:600}}>PDF oder HTML</span> hier reinziehen oder klicken
-              <div style={{fontSize:12,marginTop:4}}>Rechnungen die mit diesem CRM erstellt wurden werden automatisch erkannt</div>
-            </div>
-          )}
-        </label>
+          );
+        })()}
         {parseErr&&<div style={{marginBottom:14,padding:'10px 14px',background:'#FEF2F2',borderRadius:8,color:'#C0392B',fontSize:13}}>{parseErr}</div>}
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
@@ -4165,7 +4178,7 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:16,borderTop:'1px solid rgba(0,0,0,0.07)'}}>
           <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
-          <button className="btn btn-primary" onClick={doImport} disabled={!form.firma.trim()}>📥 Rechnung importieren</button>
+          <button className="btn btn-primary" onClick={doImport} disabled={!form.number.trim()&&!form.firma.trim()}>📥 Rechnung importieren</button>
         </div>
       </div>
     </div>
@@ -4473,6 +4486,112 @@ function CSVImportModal({sections,onImport,onClose}){
   );
 }
 
+function TokenEditModal({token, onSave, onClose}){
+  const SERVICES=['GitHub','Anthropic','OpenAI','Google','AWS','Azure','Stripe','Twilio','SendGrid','Custom'];
+  const [form,setForm]=React.useState({service:token?.service||'GitHub',account:token?.account||'',token:token?.token||'',notes:token?.notes||''});
+  const [showTok,setShowTok]=React.useState(!token);
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return(
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="modal-box" style={{width:480}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
+          <h2 style={{fontSize:17,fontWeight:800}}>{token?'Token bearbeiten':'Neuer Token'}</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'#9CA3AF'}}><Icons.X/></button>
+        </div>
+        <div style={{display:'grid',gap:14}}>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:'#6B6560',display:'block',marginBottom:5}}>Service</label>
+            <select value={form.service} onChange={e=>f('service',e.target.value)}>
+              {SERVICES.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:'#6B6560',display:'block',marginBottom:5}}>Konto / E-Mail</label>
+            <input value={form.account} onChange={e=>f('account',e.target.value)} placeholder="z.B. mateo@webars.at"/>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:'#6B6560',display:'block',marginBottom:5}}>API Token / Key</label>
+            <div style={{position:'relative'}}>
+              <input type={showTok?'text':'password'} value={form.token} onChange={e=>f('token',e.target.value)} placeholder="Token einfügen..." style={{paddingRight:44,fontFamily:'monospace',fontSize:13}}/>
+              <button type="button" onClick={()=>setShowTok(v=>!v)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#9CA3AF',fontSize:14}}>{showTok?'🙈':'👁'}</button>
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:'#6B6560',display:'block',marginBottom:5}}>Notizen (optional)</label>
+            <input value={form.notes} onChange={e=>f('notes',e.target.value)} placeholder="z.B. Ablaufdatum, Berechtigungen..."/>
+          </div>
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:24}}>
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={()=>onSave(form)} disabled={!form.token.trim()}>{token?'Speichern':'Hinzufügen'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TokensView({tokens,onUpdate}){
+  const [modal,setModal]=React.useState(null);
+  const [visible,setVisible]=React.useState({});
+  const [copied,setCopied]=React.useState(null);
+  const SERVICE_COLOR={GitHub:'#24292e',Anthropic:'#d97706',OpenAI:'#10a37f',Google:'#4285F4',AWS:'#FF9900',Azure:'#0078D4',Stripe:'#635BFF',Twilio:'#F22F46',SendGrid:'#1A82E2',Custom:'#6B6560'};
+  const save=(form)=>{
+    if(modal==='add') onUpdate([...tokens,{...form,id:uid(),createdAt:new Date().toISOString()}]);
+    else onUpdate(tokens.map(t=>t.id===modal.id?{...modal,...form}:t));
+    setModal(null);
+  };
+  const del=(id)=>{if(window.confirm('Token wirklich löschen?'))onUpdate(tokens.filter(t=>t.id!==id));};
+  const copy=(id,val)=>{navigator.clipboard.writeText(val).catch(()=>{});setCopied(id);setTimeout(()=>setCopied(null),1500);};
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:'28px'}}>
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:20}}>
+        <button className="btn btn-primary" onClick={()=>setModal('add')}><Icons.Plus/>Neuer Token</button>
+      </div>
+      {tokens.length===0?(
+        <div style={{textAlign:'center',padding:'60px 0',color:'#B0ABA5'}}>
+          <div style={{fontSize:40,marginBottom:12}}>🔑</div>
+          <div style={{fontWeight:600,fontSize:15,color:'#6B6560',marginBottom:6}}>Keine API-Tokens gespeichert</div>
+          <div style={{fontSize:13}}>Speichere GitHub-, OpenAI- oder andere API-Keys sicher im CRM.</div>
+        </div>
+      ):(
+        <div style={{display:'grid',gap:8}}>
+          {tokens.map(t=>{
+            const isVis=visible[t.id];const isCopied=copied===t.id;
+            const color=SERVICE_COLOR[t.service]||SERVICE_COLOR.Custom;
+            const initials=(t.service||'?').slice(0,2).toUpperCase();
+            return(
+              <div key={t.id} style={{background:'white',borderRadius:12,padding:'16px 20px',border:'1px solid rgba(0,0,0,.07)',display:'flex',alignItems:'center',gap:16}}>
+                <div style={{width:38,height:38,borderRadius:9,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <span style={{fontSize:11,fontWeight:800,color:'white',letterSpacing:'-0.01em'}}>{initials}</span>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontWeight:700,fontSize:14}}>{t.service}</span>
+                    {t.account&&<span style={{fontSize:12,color:'#9CA3AF'}}>{t.account}</span>}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <code style={{fontSize:12,color:'#374151',background:'#F3F4F6',borderRadius:6,padding:'3px 8px',fontFamily:'monospace',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:340}}>
+                      {isVis?t.token:'••••••••••••••••••••••••••'}
+                    </code>
+                    <button onClick={()=>setVisible(v=>({...v,[t.id]:!isVis}))} style={{background:'none',border:'none',cursor:'pointer',padding:'3px 6px',borderRadius:5,color:'#9CA3AF',fontSize:13}} title={isVis?'Verstecken':'Anzeigen'}>{isVis?'🙈':'👁'}</button>
+                    <button onClick={()=>copy(t.id,t.token)} style={{background:isCopied?'#DCFCE7':'#F3F4F6',border:'none',cursor:'pointer',padding:'4px 10px',borderRadius:6,color:isCopied?'#16a34a':'#374151',fontSize:11.5,fontWeight:600,transition:'all .15s',flexShrink:0}}>{isCopied?'✓ Kopiert':'📋 Kopieren'}</button>
+                  </div>
+                  {t.notes&&<div style={{fontSize:11.5,color:'#9CA3AF',marginTop:5}}>{t.notes}</div>}
+                </div>
+                <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>setModal(t)}>Bearbeiten</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>del(t.id)}>Löschen</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {modal&&<TokenEditModal token={modal==='add'?null:modal} onSave={save} onClose={()=>setModal(null)}/>}
+    </div>
+  );
+}
+
 function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const [state,setState]=useState(()=>({
     ...initialData,
@@ -4484,12 +4603,16 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     claudeTasks: initialData.claudeTasks || [],
     quotes: initialData.quotes || [],
     quoteSettings: {...DEFAULT_QUOTE_SETTINGS, ...(initialData.quoteSettings||{})},
+    invoices: initialData.invoices || [],
+    invoiceSettings: {...DEFAULT_INVOICE_SETTINGS,...(initialData.invoiceSettings||{})},
+    tokens: initialData.tokens || [],
   }));
   const TODOS_VIEW = '__todos__';
   const AI_VIEW = '__ai__';
   const CLAUDE_VIEW = '__claude__';
   const QUOTES_VIEW = '__quotes__';
   const INVOICES_VIEW = '__invoices__';
+  const TOKENS_VIEW = '__tokens__';
   const [activeId,setActiveId]=useState(initialData.sections[0]?.id);
   const [activeSubId,setActiveSubId]=useState(null);
   const [search,setSearch]=useState('');
@@ -4523,7 +4646,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     const fresh=await ghCheckForUpdates(cryptoKey);
     if(fresh){
       skipNextSaveRef.current=true;
-      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[], quotes:fresh.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(fresh.quoteSettings||{})}, invoices:fresh.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(fresh.invoiceSettings||{})}}));
+      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[], quotes:fresh.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(fresh.quoteSettings||{})}, invoices:fresh.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(fresh.invoiceSettings||{})}, tokens:fresh.tokens||[]}));
       return true;
     }
     return false;
@@ -4657,6 +4780,16 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
               {count>0&&!overdue&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
             </button>
           );})()}
+          {/* Tokens */}
+          {(()=>{const isActive=activeId===TOKENS_VIEW;const count=(state.tokens||[]).length;return(
+            <button onClick={()=>setActiveId(TOKENS_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
+              onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,.05)';}}
+              onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:13,width:18,textAlign:'center',flexShrink:0,opacity:isActive?1:.5}}>🔑</span>
+              <span style={{flex:1,fontSize:13.5,fontWeight:isActive?600:400,color:isActive?'white':'rgba(255,255,255,.5)',textAlign:'left',letterSpacing:'-0.01em'}}>Tokens</span>
+              {count>0&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
+            </button>
+          );})()}
           {state.sections.map(s=>{
             const count=state.contacts.filter(c=>c.sectionId===s.id).length;
             const isActive=s.id===activeId;
@@ -4777,6 +4910,16 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             onDelete={(id)=>upd({quotes:(state.quotes||[]).filter(q=>q.id!==id)})}
             onSettings={()=>setModal('quoteSettings')}
           />
+        </>) : activeId === TOKENS_VIEW ? (<>
+          <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+            <div style={{flex:1}}>
+              <h1 style={{fontSize:18,fontWeight:800,letterSpacing:'-0.02em'}}>Tokens & API Keys</h1>
+              <div style={{fontSize:12,color:'#B0ABA5',marginTop:2}}>
+                <span>{(state.tokens||[]).length} {(state.tokens||[]).length===1?'Token':'Tokens'} gespeichert</span>
+              </div>
+            </div>
+          </div>
+          <TokensView tokens={state.tokens||[]} onUpdate={tokens=>upd({tokens})}/>
         </>) : activeId === INVOICES_VIEW ? (<>
           <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
             <div style={{flex:1}}>
