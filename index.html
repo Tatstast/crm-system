@@ -286,6 +286,7 @@ async function loadEncrypted(key) {
 // ─── GitHub Sync ────────────────────────────────────────────────
 const GH_SETTINGS_KEY = 'webars_gh_settings_v1';
 const GH_SHA_KEY = 'webars_gh_sha_v1';
+const GH_GIST_KEY = 'webars_jarvis_gist_v1';
 const DATA_BACKUP_KEY = 'webars_data_backup_v1';
 const SNAP_PREFIX = 'webars_snap_v2_';
 const SNAP_SLOTS = 5;
@@ -313,7 +314,7 @@ function getLocalSnapshots(){
 
 let _ghSettings = null;       // {token, repo, path}
 let _ghSha = localStorage.getItem(GH_SHA_KEY) || null; // persisted across reloads
-let _ghSummarySha = null;     // SHA for crm_summary.json (Jarvis API)
+let _gistId = localStorage.getItem(GH_GIST_KEY) || null; // private Gist ID for Jarvis
 let _ghSyncState = {state:'idle'}; // {state: 'idle'|'ok'|'error', message, at}
 let _notifySync = null;       // hook for UI updates
 
@@ -339,9 +340,9 @@ function clearGithubSettings() {
   localStorage.removeItem(GH_SETTINGS_KEY);
   _ghSettings = null;
   _ghSha = null;
-  _ghSummarySha = null;
   _ghSyncState = {state:'idle'};
 }
+function getJarvisGistId(){ return _gistId; }
 
 function buildCrmSummary(state) {
   return {
@@ -378,23 +379,32 @@ function buildCrmSummary(state) {
 }
 async function pushCrmSummary(state, ghSettings) {
   try {
-    const summary = buildCrmSummary(state);
-    if(!_ghSummarySha){
-      const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/crm_summary.json?ref=main`,
-        {headers:{Authorization:`Bearer ${ghSettings.token}`}});
-      if(r.ok){const j=await r.json();_ghSummarySha=j.sha||null;}
+    const content = JSON.stringify(buildCrmSummary(state), null, 2);
+    const headers = {Authorization:`Bearer ${ghSettings.token}`,'Content-Type':'application/json'};
+    if (!_gistId) {
+      // Erstmalig: neuen privaten Gist anlegen
+      const r = await fetch('https://api.github.com/gists', {
+        method:'POST', headers,
+        body: JSON.stringify({
+          description: 'CRM Summary — Jarvis API (privat, nicht löschen)',
+          public: false,
+          files: {'crm_summary.json': {content}}
+        })
+      });
+      if (r.ok) {
+        const j = await r.json();
+        _gistId = j.id;
+        localStorage.setItem(GH_GIST_KEY, _gistId);
+      }
+    } else {
+      // Bestehenden Gist aktualisieren
+      const r = await fetch(`https://api.github.com/gists/${_gistId}`, {
+        method:'PATCH', headers,
+        body: JSON.stringify({files: {'crm_summary.json': {content}}})
+      });
+      if (!r.ok) { _gistId = null; localStorage.removeItem(GH_GIST_KEY); }
     }
-    const body={
-      message:`Update CRM summary · ${new Date().toISOString().slice(0,16).replace('T',' ')}`,
-      content:btoa(unescape(encodeURIComponent(JSON.stringify(summary,null,2)))),
-      branch:'main',
-      ...(_ghSummarySha?{sha:_ghSummarySha}:{})
-    };
-    const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/crm_summary.json`,
-      {method:'PUT',headers:{Authorization:`Bearer ${ghSettings.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(r.ok){const j=await r.json();_ghSummarySha=j.content?.sha||null;}
-    else _ghSummarySha=null;
-  } catch(e){_ghSummarySha=null;}
+  } catch(e) {}
 }
 
 async function ghValidateAccess(token, repo) {
@@ -1386,6 +1396,27 @@ function GithubSyncModal({cryptoKey, currentSettings, onSaved, onClose, onCleare
           <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid #F0EDE8',fontSize:11.5,color:'#A8A39D'}}>
             Sync-Status: <span style={{fontWeight:600,color:getSyncState().state==='ok'?'#16a34a':getSyncState().state==='error'?'#C0392B':'#6B6560'}}>{getSyncState().state==='ok'?'OK · live':getSyncState().state==='error'?`Fehler: ${getSyncState().message||'unbekannt'}`:'wartet'}</span>
             {getSyncState().at && <span> · zuletzt {new Date(getSyncState().at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>}
+          </div>
+        )}
+
+        {isUpdate && (
+          <div style={{marginTop:18,paddingTop:18,borderTop:'1px solid #F0EDE8'}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#141210',marginBottom:6}}>🤖 Jarvis API</div>
+            {(()=>{
+              const gid = getJarvisGistId();
+              return gid ? (
+                <div style={{fontSize:12,color:'#3F3A35',lineHeight:1.6}}>
+                  <div style={{marginBottom:4}}>Privater Gist wird automatisch bei jedem Speichern aktualisiert.</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <code style={{background:'#FAFAF8',padding:'4px 8px',borderRadius:6,fontSize:11,border:'1px solid #E8E4DF',flex:1,wordBreak:'break-all'}}>{gid}</code>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>navigator.clipboard?.writeText(gid)} style={{flexShrink:0,fontSize:11}}>Kopieren</button>
+                  </div>
+                  <div style={{fontSize:11,color:'#A8A39D',marginTop:4}}>→ Als <code>JARVIS_GIST_ID</code> in Jarvis-Konfiguration eintragen</div>
+                </div>
+              ) : (
+                <div style={{fontSize:12,color:'#A8A39D',lineHeight:1.5}}>Gist wird beim nächsten Speichern automatisch erstellt und erscheint dann hier.</div>
+              );
+            })()}
           </div>
         )}
 
