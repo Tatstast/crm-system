@@ -4045,12 +4045,13 @@ function parseInvoiceText(full,leftCol,existingContacts){
       // OCR mode: no label found — extract recipient from lines between meta strip and items table
       let itemsHdrIdx=fullLines.length;
       for(let i=metaValLineIdx+1;i<fullLines.length;i++){const nl=norm(fullLines[i]);if(nl.includes('BESCHREIBUNG')&&(nl.includes('EP')||nl.includes('GP')||nl.includes('MGE'))){itemsHdrIdx=i;break;}}
-      // Detect sender company: first short clean word-only line before meta strip (appears in top header)
-      let senderCompany='';
+      // Detect sender company + sender UID from header (before meta strip values line)
+      let senderCompany='',senderUid='';
       for(let i=0;i<metaValLineIdx;i++){
         const l=fullLines[i];
-        if(l.length>2&&l.length<60&&/^[A-ZÄÖÜa-zäöü]/.test(l)&&!/@/.test(l)&&!/^\+?\d/.test(l)&&!/^UID/i.test(l)&&![...l.matchAll(new RegExp(dateRx.source,'g'))].length){
-          senderCompany=l;break;
+        if(!senderUid){const um=l.match(/^UID:\s*([A-Z]{2}\w+)/i);if(um)senderUid=um[1];}
+        if(!senderCompany&&l.length>2&&l.length<60&&/^[A-ZÄÖÜa-zäöü]/.test(l)&&!/@/.test(l)&&!/^\+?\d/.test(l)&&!/^UID/i.test(l)&&![...l.matchAll(new RegExp(dateRx.source,'g'))].length){
+          senderCompany=l;
         }
       }
       for(let i=metaValLineIdx+1;i<itemsHdrIdx;i++){
@@ -4073,9 +4074,10 @@ function parseInvoiceText(full,leftCol,existingContacts){
           const zm=zipPart.match(/^(\d{4,5})\s+(.+)/);
           if(zm){res.zip=zm[1];res.city=zm[2].trim();}
         } else if(!res.country&&/^(Österreich|Deutschland|Schweiz|Austria|Germany)/i.test(l)){
-          res.country=l.split(/\s{3,}/)[0].trim();
+          res.country=l.match(/^(Österreich|Deutschland|Schweiz|Austria|Germany\w*)/i)[0];
         } else if(!res.taxId&&/^UID:/i.test(l)){
-          res.taxId=l.replace(/^UID:\s*/i,'').trim();
+          const uid=l.replace(/^UID:\s*/i,'').split(/\s+/)[0].trim();
+          if(uid&&uid!==senderUid)res.taxId=uid;
         } else if(!res.email&&/@/.test(l)){
           res.email=(l.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';
         } else if(!res.telefon&&/^\+?\d[\d\s()-]{5,}/.test(l)){
@@ -4143,6 +4145,7 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
   const upd=p=>setForm(f=>({...f,...p}));
   const updItem=(idx,p)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,...p}:it)}));
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}]}));
+  const addHeading=()=>setForm(f=>({...f,items:[...f.items,{id:uid(),type:'heading',description:''}]}));
   const removeItem=idx=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
 
   const handleFile=async(file)=>{
@@ -4308,14 +4311,24 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
             <div/>
           </div>
           {form.items.map((it,idx)=>(
-            <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 32px',gap:8,marginBottom:8,alignItems:'center'}}>
-              <input value={it.description} onChange={e=>updItem(idx,{description:e.target.value})} placeholder="Beschreibung der Leistung"/>
-              <input type="number" min="0" step="0.01" value={it.quantity} onChange={e=>updItem(idx,{quantity:parseFloat(e.target.value)||0})} style={{textAlign:'right'}}/>
-              <input type="number" min="0" step="0.01" value={it.unitPrice} onChange={e=>updItem(idx,{unitPrice:parseFloat(e.target.value)||0})} style={{textAlign:'right'}}/>
-              {form.items.length>1?<button onClick={()=>removeItem(idx)} style={{background:'none',border:'none',color:'#DDD',fontSize:18,cursor:'pointer',padding:0,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>:<div/>}
-            </div>
+            it.type==='heading'?(
+              <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 32px',gap:8,marginBottom:6,alignItems:'center'}}>
+                <input value={it.description} onChange={e=>updItem(idx,{description:e.target.value})} placeholder="Abschnitt / Überschrift" style={{fontWeight:700,background:'#F0EDE9',borderColor:'transparent',fontSize:13}}/>
+                <button onClick={()=>removeItem(idx)} style={{background:'none',border:'none',color:'#DDD',fontSize:18,cursor:'pointer',padding:0,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>
+              </div>
+            ):(
+              <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 80px 110px 32px',gap:8,marginBottom:8,alignItems:'center'}}>
+                <input value={it.description} onChange={e=>updItem(idx,{description:e.target.value})} placeholder="Beschreibung der Leistung"/>
+                <input type="number" min="0" step="0.01" value={it.quantity} onChange={e=>updItem(idx,{quantity:parseFloat(e.target.value)||0})} style={{textAlign:'right'}}/>
+                <input type="number" min="0" step="0.01" value={it.unitPrice} onChange={e=>updItem(idx,{unitPrice:parseFloat(e.target.value)||0})} style={{textAlign:'right'}}/>
+                {form.items.length>1?<button onClick={()=>removeItem(idx)} style={{background:'none',border:'none',color:'#DDD',fontSize:18,cursor:'pointer',padding:0,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color='#C0392B'} onMouseLeave={e=>e.currentTarget.style.color='#DDD'}>×</button>:<div/>}
+              </div>
+            )
           ))}
-          <button className="btn btn-ghost btn-sm" onClick={addItem} style={{marginTop:4}}><Icons.Plus/>Position hinzufügen</button>
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button className="btn btn-ghost btn-sm" onClick={addItem}><Icons.Plus/>Position hinzufügen</button>
+            <button className="btn btn-ghost btn-sm" onClick={addHeading} style={{color:'#8B5CF6'}}>§ Abschnitt hinzufügen</button>
+          </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
           <div><label style={lbl}>MwSt (%)</label><input type="number" min="0" step="1" value={form.taxRate} onChange={e=>upd({taxRate:parseFloat(e.target.value)||0})} style={{textAlign:'right'}}/></div>
