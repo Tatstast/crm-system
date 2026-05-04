@@ -3974,13 +3974,36 @@ function parseInvoiceText(full,leftCol,existingContacts){
       break;
     }
   }
-  // Invoice number fallback (anywhere in document)
-  if(!res.number){const m=nfull.match(/\b([A-Z]{1,6}-\d{4}-\d{2,6})\b/);if(m)res.number=m[1];}
-  // Date fallback: look for any date in first 30 lines
+  // Find the meta strip VALUES line (multiple dates on same line) — used for OCR fallback
+  let metaValLineIdx=-1;
+  for(let i=0;i<fullLines.length;i++){
+    const dm=[...fullLines[i].matchAll(new RegExp(dateRx.source,'g'))];
+    if(dm.length>=2){metaValLineIdx=i;break;}
+  }
+  // Invoice number: prefer from meta strip values line (avoids OCR header noise), then anywhere
+  if(!res.number&&metaValLineIdx>=0){
+    const m=fullLines[metaValLineIdx].match(/\b([A-Z]{1,4}-\d{4}-\d{2,6})\b/);
+    if(m)res.number=m[1];
+  }
+  if(!res.number){const m=nfull.match(/\b([A-Z]{1,4}-\d{4}-\d{2,6})\b/);if(m)res.number=m[1];}
+  // Date fallback: use meta strip values line or first 30 lines
+  if(!res.date){
+    const srcIdx=metaValLineIdx>=0?metaValLineIdx:0;
+    for(let i=srcIdx;i<Math.min(srcIdx+5,fullLines.length);i++){
+      const dm=[...fullLines[i].matchAll(new RegExp(dateRx.source,'g'))];
+      if(dm.length>=2){
+        const dates=dm.map(x=>parseDEDate(x[0])).filter(d=>d);
+        if(dates[0])res.date=dates[0];
+        if(dates[1])res.serviceDate=dates[1];
+        if(dates[2])res.dueDate=dates[2];
+        break;
+      }
+    }
+  }
   if(!res.date){
     for(let i=0;i<Math.min(30,fullLines.length);i++){
       const dm=fullLines[i].match(dateRx);
-      if(dm){res.date=parseDEDate(dm[0]);if(dm[1])res.serviceDate=parseDEDate(dm[1]);if(dm[2])res.dueDate=parseDEDate(dm[2]);break;}
+      if(dm){res.date=parseDEDate(dm[0]);break;}
     }
   }
   // Due date fallback by label
@@ -4016,7 +4039,51 @@ function parseInvoiceText(full,leftCol,existingContacts){
     parseRecipientBlock(leftLines,ei,nl=>nl.includes('RECHNUNGSSTELLER')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'));
   } else {
     for(let i=0;i<fullLines.length;i++){if(norm(fullLines[i]).includes('RECHNUNGSEMPF')){ei=i;break;}}
-    if(ei>=0)parseRecipientBlock(fullLines,ei,nl=>nl.includes('RECHNUNGSSTELL')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'));
+    if(ei>=0){
+      parseRecipientBlock(fullLines,ei,nl=>nl.includes('RECHNUNGSSTELL')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'));
+    } else if(metaValLineIdx>=0){
+      // OCR mode: no label found — extract recipient from lines between meta strip and items table
+      let itemsHdrIdx=fullLines.length;
+      for(let i=metaValLineIdx+1;i<fullLines.length;i++){const nl=norm(fullLines[i]);if(nl.includes('BESCHREIBUNG')&&(nl.includes('EP')||nl.includes('GP')||nl.includes('MGE'))){itemsHdrIdx=i;break;}}
+      // Detect sender company: first short clean word-only line before meta strip (appears in top header)
+      let senderCompany='';
+      for(let i=0;i<metaValLineIdx;i++){
+        const l=fullLines[i];
+        if(l.length>2&&l.length<60&&/^[A-ZÄÖÜa-zäöü]/.test(l)&&!/@/.test(l)&&!/^\+?\d/.test(l)&&!/^UID/i.test(l)&&![...l.matchAll(new RegExp(dateRx.source,'g'))].length){
+          senderCompany=l;break;
+        }
+      }
+      for(let i=metaValLineIdx+1;i<itemsHdrIdx;i++){
+        const l=fullLines[i];const nl=norm(l);
+        if(!l)continue;
+        // Company line: strip sender company from the right side if present
+        if(!res.firma){
+          let firm=l;
+          if(senderCompany&&firm.includes(senderCompany)){firm=firm.slice(0,firm.lastIndexOf(senderCompany)).trim();}
+          if(firm.length>1&&!/^UID/i.test(firm)&&!/@/.test(firm)&&!/^\+?\d/.test(firm))res.firma=firm;
+          continue;
+        }
+        if(!res.address){
+          // First address-pattern occurrence in the line (street + number)
+          const am=l.match(/([A-ZÄÖÜa-zäöü][\wäöüÄÖÜß\s-]+\s\d+[a-z\/]?(?:\s*\/\s*\d+)?)/);
+          if(am)res.address=am[0].trim();
+          continue;
+        }
+        if(!res.zip){
+          // Zip/city: before any "UID:" on the line
+          const zipPart=l.split(/\s+UID:/i)[0];
+          const zm=zipPart.match(/(\d{4,5})\s+([A-ZÄÖÜa-zäöü]\S+(?:\s[A-Za-z]+)?)/);
+          if(zm){res.zip=zm[1];res.city=zm[2].trim();}
+          // Also grab recipient UID from this line if present and not sender UID
+          if(!res.taxId){const um=l.match(/UID:\s*([A-Z]{2}\w+)/ig);if(um&&um.length>1)res.taxId=(um[um.length-1]||'').replace(/UID:\s*/i,'').trim();}
+          continue;
+        }
+        if(!res.country&&/^(Österreich|Deutschland|Schweiz|Austria|Germany)/i.test(l)){res.country=l.split(/\s{2,}/)[0].trim();continue;}
+        if(!res.taxId&&/^UID:/i.test(l)){res.taxId=l.replace(/^UID:\s*/i,'').trim();continue;}
+        if(!res.email&&/@/.test(l)){res.email=(l.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';continue;}
+        if(!res.telefon&&/^\+?\d[\d\s()-]{5,}/.test(l)){res.telefon=(l.match(/^\+?[\d\s()-]+/)||[''])[0].trim();continue;}
+      }
+    }
   }
   if(!res.email){const m=nfull.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);if(m)res.email=m[0];}
   // Match existing contact
@@ -4027,17 +4094,30 @@ function parseInvoiceText(full,leftCol,existingContacts){
   }
   // Line items
   const parseDec=s=>parseFloat((s||'0').replace(/€/g,'').replace(/\./g,'').replace(',','.'))||0;
+  const itemRx=/^(?:\d+\s+)?(.+?)\s+(\d+(?:[.,]\d+)?)\s+([\d.,]+)\s*€?\s+([\d.,]+)\s*€?\s*$/;
+  const isStopLine=l=>/^(Zwischensumme|Nettobetrag|GESAMT|Gesamt|USt\s*\d|MwSt\s*\d|Summe|Rabatt\s+\d)/i.test(l);
   let inItems=false;
   for(let i=0;i<fullLines.length;i++){
     const l=fullLines[i];const nl=norm(l);
     if(nl.includes('BESCHREIBUNG')&&(nl.includes('EP')||nl.includes('GP')||nl.includes('MGE'))){inItems=true;continue;}
-    if(inItems&&/^(Zwischensumme|Nettobetrag|GESAMT|Gesamt|USt\s*\d|MwSt\s*\d|Summe)/i.test(l))break;
+    if(inItems&&isStopLine(l))break;
     if(!inItems)continue;
-    const m=l.match(/^(?:\d+\s+)?(.+?)\s+(\d+(?:[.,]\d+)?)\s+([\d.,]+)\s*€?\s+([\d.,]+)\s*€?\s*$/);
+    const m=l.match(itemRx);
     if(m){
       const desc=m[1].trim(),qty=parseDec(m[2]),ep=parseDec(m[3]);
-      if(desc.length>=2&&qty>0&&ep>0&&!/^(Zwischensumme|Netto|Gesamt|MwSt|USt|Summe|Rabatt)/i.test(desc))
-        res.items.push({id:uid(),type:'item',description:desc,quantity:qty,unitPrice:ep});
+      if(desc.length>=2&&qty>0&&ep>0&&!/^(Zwischensumme|Netto|Gesamt|MwSt|USt|Summe|Rabatt)/i.test(desc)){
+        const item={id:uid(),type:'item',description:desc,quantity:qty,unitPrice:ep};
+        res.items.push(item);
+        // Collect continuation description lines
+        const descParts=[];
+        while(i+1<fullLines.length){
+          const next=fullLines[i+1];
+          if(isStopLine(next)||next.match(itemRx)||norm(next).includes('BESCHREIBUNG'))break;
+          if(next.trim())descParts.push(next.trim());
+          i++;
+        }
+        if(descParts.length)item.description=desc+'\n'+descParts.join('\n');
+      }
     }
   }
   if(res.items.length===0)res.items=[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}];
