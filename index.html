@@ -3872,6 +3872,37 @@ function SnapshotRestoreModal({cryptoKey, onRestore, onClose}){
 }
 
 // ── Invoice File Parsing ─────────────────────────────────────────
+async function loadTesseract(){
+  if(window.Tesseract)return window.Tesseract;
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=>resolve(window.Tesseract);
+    s.onerror=()=>reject(new Error('Tesseract.js konnte nicht geladen werden.'));
+    document.head.appendChild(s);
+  });
+}
+async function extractPdfDataOcr(file,onProgress){
+  const lib=await loadPdfJs();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  if(onProgress)onProgress('Tesseract wird geladen…');
+  const Tess=await loadTesseract();
+  const worker=await Tess.createWorker('deu');
+  let fullText='';
+  for(let p=1;p<=pdf.numPages;p++){
+    if(onProgress)onProgress('OCR Seite '+p+'/'+pdf.numPages+'…');
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:2.5});
+    const canvas=document.createElement('canvas');
+    canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+    const {data:{text}}=await worker.recognize(canvas);
+    fullText+=text+'\n';
+  }
+  await worker.terminate();
+  return{full:fullText,leftCol:''};
+}
 async function loadPdfJs(){
   if(window.pdfjsLib)return window.pdfjsLib;
   return new Promise((resolve,reject)=>{
@@ -3964,13 +3995,11 @@ function parseInvoiceText(full,leftCol,existingContacts){
   // Tax rate
   const txM=nfull.match(/USt\s*(\d+)\s*%/i)||nfull.match(/MwSt[^%\d]*?(\d+)\s*%/i)||nfull.match(/(\d+)\s*%\s*(?:MwSt|USt)/i);
   if(txM)res.taxRate=parseInt(txM[1]);
-  // Recipient from left column (after RECHNUNGSEMPFÄNGER)
-  let ei=-1;
-  for(let i=0;i<leftLines.length;i++){if(norm(leftLines[i]).includes('RECHNUNGSEMPF')){ei=i;break;}}
-  if(ei>=0){
-    for(let i=ei+1;i<Math.min(ei+15,leftLines.length);i++){
-      const l=leftLines[i];const nl=norm(l);
-      if(!l||nl.includes('RECHNUNGSSTELLER')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'))break;
+  // Recipient — try left column first, fall back to full text (OCR mode)
+  const parseRecipientBlock=(lines,startIdx,stopFn)=>{
+    for(let i=startIdx+1;i<Math.min(startIdx+15,lines.length);i++){
+      const l=lines[i];const nl=norm(l);
+      if(!l||stopFn(nl))break;
       if(!res.firma&&!/^UID/i.test(l)&&!/@/.test(l)&&!/^\+?\d/.test(l)&&l.length>2&&!/^z\.?Hd/i.test(l))res.firma=l;
       else if(!res.ansprechpartner&&/^z\.?Hd/i.test(l))res.ansprechpartner=l.replace(/^z\.?Hd\.?\s*/i,'').trim();
       else if(!res.zip&&/^\d{4,5}\s+\S/.test(l)){const zm=l.match(/^(\d{4,5})\s+(.+)/);if(zm){res.zip=zm[1];res.city=zm[2].replace(/\s*(Österreich|Deutschland|Schweiz|Austria|Germany).*/i,'').trim();}}
@@ -3980,6 +4009,14 @@ function parseInvoiceText(full,leftCol,existingContacts){
       else if(!res.email&&/@/.test(l))res.email=l.trim();
       else if(!res.telefon&&/^\+?\d[\d\s()-]{5,}$/.test(l))res.telefon=l.trim();
     }
+  };
+  let ei=-1;
+  for(let i=0;i<leftLines.length;i++){if(norm(leftLines[i]).includes('RECHNUNGSEMPF')){ei=i;break;}}
+  if(ei>=0){
+    parseRecipientBlock(leftLines,ei,nl=>nl.includes('RECHNUNGSSTELLER')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'));
+  } else {
+    for(let i=0;i<fullLines.length;i++){if(norm(fullLines[i]).includes('RECHNUNGSEMPF')){ei=i;break;}}
+    if(ei>=0)parseRecipientBlock(fullLines,ei,nl=>nl.includes('RECHNUNGSSTELL')||nl.includes('BESCHREIBUNG')||nl.includes('ZAHLUNGS')||nl.startsWith('NR.'));
   }
   if(!res.email){const m=nfull.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);if(m)res.email=m[0];}
   // Match existing contact
@@ -4046,20 +4083,23 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
     try{
       let parsedData;
       if(isPdf){
-        console.log('[Import] PDF erkannt, lade pdf.js...');
         let full='',leftCol='';
-        try{
-          const res=await extractPdfData(file);
-          full=res.full;leftCol=res.leftCol;
-        }catch(pdfErr){
-          setRawText('[PDF.js Fehler] '+pdfErr.message+'\n\nDatei: '+file.name+' ('+file.type+', '+file.size+' bytes)');
-          throw pdfErr;
+        try{const res=await extractPdfData(file);full=res.full;leftCol=res.leftCol;}
+        catch(pdfErr){setRawText('[PDF.js Fehler] '+pdfErr.message);throw pdfErr;}
+        if(!full.trim()){
+          setParseErr('Kein Textlayer gefunden — OCR wird gestartet (10–20 Sek.)…');
+          try{
+            const res=await extractPdfDataOcr(file,msg=>setParseErr(msg));
+            full=res.full;leftCol=res.leftCol;
+          }catch(ocrErr){
+            setRawText('[OCR Fehler] '+ocrErr.message);
+            throw ocrErr;
+          }
         }
+        setParseErr('');
         const debugLines=full.split('\n').slice(0,60).join('\n');
-        setRawText('=== DATEI ===\n'+file.name+' ('+file.size+' bytes)\n\n=== EXTRAHIERTE ZEILEN (erste 60) ===\n'+(debugLines||'(leer — kein Text extrahiert)')+'\n\n=== LEFT COL (erste 30 Zeilen) ===\n'+(leftCol.split('\n').slice(0,30).join('\n')||'(leer)'));
-        console.log('[Import] PDF full:\n',full);
+        setRawText('=== DATEI ===\n'+file.name+'\n\n=== TEXT (erste 60 Zeilen) ===\n'+(debugLines||'(leer)'));
         parsedData=parseInvoiceText(full,leftCol,contacts);
-        console.log('[Import] geparst:',parsedData);
       } else if(isHtml){
         const text=await file.text();
         setRawText('=== HTML (erste 800 Zeichen) ===\n'+text.slice(0,800));
