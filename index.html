@@ -250,6 +250,7 @@ async function saveEncrypted(key, data) {
       localStorage.setItem(GH_SHA_KEY, newSha);
       _ghSyncState = {state:'ok', at:Date.now()};
       _notifySync && _notifySync();
+      pushCrmSummary(data, _ghSettings).catch(()=>{});
     } catch(e) {
       _ghSyncState = {state:'error', message:e.message, at:Date.now()};
       _notifySync && _notifySync();
@@ -312,6 +313,7 @@ function getLocalSnapshots(){
 
 let _ghSettings = null;       // {token, repo, path}
 let _ghSha = localStorage.getItem(GH_SHA_KEY) || null; // persisted across reloads
+let _ghSummarySha = null;     // SHA for crm_summary.json (Jarvis API)
 let _ghSyncState = {state:'idle'}; // {state: 'idle'|'ok'|'error', message, at}
 let _notifySync = null;       // hook for UI updates
 
@@ -337,7 +339,52 @@ function clearGithubSettings() {
   localStorage.removeItem(GH_SETTINGS_KEY);
   _ghSettings = null;
   _ghSha = null;
+  _ghSummarySha = null;
   _ghSyncState = {state:'idle'};
+}
+
+function buildCrmSummary(state) {
+  return {
+    updatedAt: new Date().toISOString(),
+    contacts: (state.contacts||[]).map(c=>({
+      id:c.id, firma:c.firma||'',
+      email:c.fields?.email||'', telefon:c.fields?.telefon||'',
+      ansprechpartner:c.fields?.ansprechpartner||'',
+      address:c.fields?.address||'', zip:c.fields?.zip||'',
+      city:c.fields?.city||'', country:c.fields?.country||'',
+      taxId:c.fields?.taxId||'',
+    })),
+    invoices: (state.invoices||[]).map(inv=>({
+      id:inv.id, number:inv.number, status:inv.status,
+      firma:inv.contactSnapshot?.firma||'', email:inv.contactSnapshot?.email||'',
+      total:quoteTotals(inv).total, date:inv.date, dueDate:inv.dueDate,
+    })),
+    quotes: (state.quotes||[]).map(q=>({
+      id:q.id, number:q.number, status:q.status,
+      firma:q.contactSnapshot?.firma||'', email:q.contactSnapshot?.email||'',
+      total:quoteTotals(q).total, date:q.date,
+    })),
+  };
+}
+async function pushCrmSummary(state, ghSettings) {
+  try {
+    const summary = buildCrmSummary(state);
+    if(!_ghSummarySha){
+      const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/crm_summary.json?ref=main`,
+        {headers:{Authorization:`Bearer ${ghSettings.token}`}});
+      if(r.ok){const j=await r.json();_ghSummarySha=j.sha||null;}
+    }
+    const body={
+      message:`Update CRM summary · ${new Date().toISOString().slice(0,16).replace('T',' ')}`,
+      content:btoa(unescape(encodeURIComponent(JSON.stringify(summary,null,2)))),
+      branch:'main',
+      ...(_ghSummarySha?{sha:_ghSummarySha}:{})
+    };
+    const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/crm_summary.json`,
+      {method:'PUT',headers:{Authorization:`Bearer ${ghSettings.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(r.ok){const j=await r.json();_ghSummarySha=j.content?.sha||null;}
+    else _ghSummarySha=null;
+  } catch(e){_ghSummarySha=null;}
 }
 
 async function ghValidateAccess(token, repo) {
@@ -4129,13 +4176,14 @@ function parseInvoiceHtml(html,existingContacts){
 }
 
 // ── Invoice Import Modal ─────────────────────────────────────────
-function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport, onClose}){
+function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport, onClose, initialData}){
   const cur=quoteSettings?.currency||'EUR';
-  const blank={number:'',date:new Date().toISOString().slice(0,10),dueDate:'',serviceDate:'',status:'bezahlt',firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:'',items:[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],taxRate:quoteSettings?.taxRate||20,discount:0,notes:'',paymentNote:invoiceSettings?.paymentNote||''};
-  const [form,setForm]=useState(blank);
+  const blank={number:'',date:new Date().toISOString().slice(0,10),dueDate:'',serviceDate:'',status:'entwurf',firma:'',ansprechpartner:'',email:'',telefon:'',address:'',zip:'',city:'',country:'Österreich',taxId:'',items:[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],taxRate:quoteSettings?.taxRate||20,discount:0,notes:'',paymentNote:invoiceSettings?.paymentNote||''};
+  const fromJarvis=!!initialData;
+  const [form,setForm]=useState(()=>fromJarvis?{...blank,firma:initialData.firma||'',email:initialData.email||'',address:initialData.address||'',zip:initialData.zip||'',city:initialData.city||'',country:initialData.country||'Österreich',taxId:initialData.taxId||'',items:(initialData.items||[]).length?initialData.items.map(it=>({id:uid(),type:'item',description:it.description||'',quantity:it.quantity??1,unitPrice:it.unitPrice??0})):[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],date:initialData.date||new Date().toISOString().slice(0,10),dueDate:initialData.dueDate||'',taxRate:initialData.taxRate??20,notes:initialData.notes||''}:blank);
   const [parsing,setParsing]=useState(false);
   const [parseErr,setParseErr]=useState('');
-  const [parsed,setParsed]=useState(false);
+  const [parsed,setParsed]=useState(fromJarvis);
   const [dragOver,setDragOver]=useState(false);
   const [contactMatch,setContactMatch]=useState(null);
   const [createContact,setCreateContact]=useState(true);
@@ -4243,6 +4291,14 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
               Rechnung wird eingelesen…
             </div>
           ):parsed?(
+            fromJarvis?(
+              <div style={{color:'#7c3aed',fontSize:13.5,fontWeight:600}}>
+                <div style={{fontSize:22,marginBottom:6}}>🤖</div>
+                Jarvis-Entwurf{form.firma?` · ${form.firma}`:''}
+                {form.items.filter(i=>i.description).length>0&&<span> · {form.items.filter(i=>i.description).length} Position(en)</span>}
+                <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:6}}>Felder prüfen und unten importieren</div>
+              </div>
+            ):(
             <div style={{color:'#16a34a',fontSize:13.5,fontWeight:600}}>
               <div style={{fontSize:22,marginBottom:6}}>✓</div>
               {form.firma?`Kunde: ${form.firma}`:'Datei gelesen'}{form.number?` · ${form.number}`:''}
@@ -4250,6 +4306,7 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
               <div style={{fontSize:12,fontWeight:400,color:'#A8A39D',marginTop:6}}>Prüfe die Felder unten und korrigiere falls nötig</div>
               <button className="btn btn-ghost btn-sm" onClick={()=>fileInputRef.current?.click()} style={{marginTop:10}}>Andere Datei wählen</button>
             </div>
+            )
           ):(
             <div style={{color:'#A8A39D',fontSize:13.5}}>
               <div style={{fontSize:28,marginBottom:8}}>📄</div>
@@ -4787,6 +4844,29 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const [previewQuote,setPreviewQuote]=useState(null);
   const [editingInvoice,setEditingInvoice]=useState(null);
   const [previewInvoice,setPreviewInvoice]=useState(null);
+  const [jarvisDraft,setJarvisDraft]=useState(null);
+
+  // Deep-link handler: ?draft=BASE64JSON (from Jarvis)
+  useEffect(()=>{
+    try{
+      const params=new URLSearchParams(window.location.search);
+      const b64=params.get('draft');
+      if(!b64)return;
+      window.history.replaceState({},'',window.location.pathname);
+      const draft=JSON.parse(decodeURIComponent(escape(atob(b64))));
+      if(draft.type==='invoice'){
+        setJarvisDraft(draft);
+        setActiveId(INVOICES_VIEW);
+        setModal('importInvoice');
+      } else if(draft.type==='quote'){
+        setActiveId(QUOTES_VIEW);
+        const items=(draft.items||[]).map(it=>({id:uid(),type:'item',description:it.description||'',quantity:it.quantity??1,unitPrice:it.unitPrice??0}));
+        const q={id:uid(),number:nextQuoteNumber(state.quoteSettings),contactId:null,contactSnapshot:{firma:draft.firma||'',ansprechpartner:'',email:draft.email||'',telefon:'',adresse:''},title:'',date:new Date().toISOString().slice(0,10),validUntil:new Date(Date.now()+30*86400000).toISOString().slice(0,10),items:items.length?items:[{id:uid(),type:'item',description:'',quantity:1,unitPrice:0}],taxRate:draft.taxRate??20,discount:0,notes:draft.notes||'',status:'entwurf',createdAt:new Date().toISOString()};
+        setEditingQuote(q);
+        upd({quoteSettings:{...state.quoteSettings,quoteCounter:(state.quoteSettings.quoteCounter||1)+1}});
+      }
+    }catch(e){}
+  },[]);
 
   useEffect(()=>{
     if(skipNextSaveRef.current){skipNextSaveRef.current=false;return;}
@@ -5195,7 +5275,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     {modal==='invoiceSettings'&&<InvoiceSettingsModal quoteSettings={state.quoteSettings} invoiceSettings={state.invoiceSettings||DEFAULT_INVOICE_SETTINGS} onSave={(qs,is_)=>upd({quoteSettings:{...state.quoteSettings,...qs},invoiceSettings:{...state.invoiceSettings,...is_}})} onClose={()=>setModal(null)}/>}
     {modal==='tokenUpdate'&&<TokenUpdateModal cryptoKey={cryptoKey} currentState={state} onSaved={()=>setModal(null)} onClose={()=>setModal(null)}/>}
     {modal==='snapshots'&&<SnapshotRestoreModal cryptoKey={cryptoKey} onRestore={data=>{skipNextSaveRef.current=true;setState(s=>({...s,...data,subsections:data.subsections||DEFAULT_SUBSECTIONS,members:data.members||[],todos:data.todos||[],aiEmployees:data.aiEmployees||[],claudeAccounts:data.claudeAccounts||[],claudeTasks:data.claudeTasks||[],quotes:data.quotes||[],quoteSettings:{...DEFAULT_QUOTE_SETTINGS,...(data.quoteSettings||{})},invoices:data.invoices||[],invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(data.invoiceSettings||{})}}));}} onClose={()=>setModal(null)}/>}
-    {modal==='importInvoice'&&<InvoiceImportModal contacts={state.contacts} invoiceSettings={state.invoiceSettings||DEFAULT_INVOICE_SETTINGS} quoteSettings={state.quoteSettings} onImport={(inv,newContact)=>{const invs=[...(state.invoices||[]),inv];const ctcts=newContact?[...state.contacts,newContact]:state.contacts;const newInvSettings=newContact?state.invoiceSettings:{...state.invoiceSettings||DEFAULT_INVOICE_SETTINGS,invoiceCounter:((state.invoiceSettings||DEFAULT_INVOICE_SETTINGS).invoiceCounter||1)+1};upd({invoices:invs,contacts:ctcts,invoiceSettings:newInvSettings});}} onClose={()=>setModal(null)}/>}
+    {modal==='importInvoice'&&<InvoiceImportModal contacts={state.contacts} invoiceSettings={state.invoiceSettings||DEFAULT_INVOICE_SETTINGS} quoteSettings={state.quoteSettings} initialData={jarvisDraft} onImport={(inv,newContact)=>{const invs=[...(state.invoices||[]),inv];const ctcts=newContact?[...state.contacts,newContact]:state.contacts;const newInvSettings=newContact?state.invoiceSettings:{...state.invoiceSettings||DEFAULT_INVOICE_SETTINGS,invoiceCounter:((state.invoiceSettings||DEFAULT_INVOICE_SETTINGS).invoiceCounter||1)+1};upd({invoices:invs,contacts:ctcts,invoiceSettings:newInvSettings});setJarvisDraft(null);}} onClose={()=>{setModal(null);setJarvisDraft(null);}}/>}
     {editingQuote && <QuoteEditor
       quote={editingQuote}
       contacts={state.contacts}
