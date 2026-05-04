@@ -4054,34 +4054,33 @@ function parseInvoiceText(full,leftCol,existingContacts){
         }
       }
       for(let i=metaValLineIdx+1;i<itemsHdrIdx;i++){
-        const l=fullLines[i];const nl=norm(l);
+        const l=fullLines[i];
         if(!l)continue;
-        // Company line: strip sender company from the right side if present
         if(!res.firma){
+          // Strip sender company merged from right side
           let firm=l;
-          if(senderCompany&&firm.includes(senderCompany)){firm=firm.slice(0,firm.lastIndexOf(senderCompany)).trim();}
+          if(senderCompany&&firm.includes(senderCompany))firm=firm.slice(0,firm.lastIndexOf(senderCompany)).trim();
+          // Also strip anything after multiple spaces (right column artefact)
+          firm=firm.split(/\s{3,}/)[0].trim();
           if(firm.length>1&&!/^UID/i.test(firm)&&!/@/.test(firm)&&!/^\+?\d/.test(firm))res.firma=firm;
-          continue;
-        }
-        if(!res.address){
-          // First address-pattern occurrence in the line (street + number)
-          const am=l.match(/([A-ZÄÖÜa-zäöü][\wäöüÄÖÜß\s-]+\s\d+[a-z\/]?(?:\s*\/\s*\d+)?)/);
-          if(am)res.address=am[0].trim();
-          continue;
-        }
-        if(!res.zip){
-          // Zip/city: before any "UID:" on the line
-          const zipPart=l.split(/\s+UID:/i)[0];
-          const zm=zipPart.match(/(\d{4,5})\s+([A-ZÄÖÜa-zäöü]\S+(?:\s[A-Za-z]+)?)/);
+        } else if(!res.address){
+          // Take FIRST street+number pattern in line (not greedy — no spaces in street-name char class)
+          const am=l.match(/([A-ZÄÖÜa-zäöü][\wäöüÄÖÜß-]+(?:\s[\wäöüÄÖÜß-]+)?\s\d+[a-zA-Z]?(?:\/\d+)?)/);
+          if(am)res.address=am[1].trim();
+        } else if(!res.zip){
+          // Left part before "UID:" = recipient zip+city
+          const zipPart=l.split(/\s{2,}|\s*UID:/i)[0].trim();
+          const zm=zipPart.match(/^(\d{4,5})\s+(.+)/);
           if(zm){res.zip=zm[1];res.city=zm[2].trim();}
-          // Also grab recipient UID from this line if present and not sender UID
-          if(!res.taxId){const um=l.match(/UID:\s*([A-Z]{2}\w+)/ig);if(um&&um.length>1)res.taxId=(um[um.length-1]||'').replace(/UID:\s*/i,'').trim();}
-          continue;
+        } else if(!res.country&&/^(Österreich|Deutschland|Schweiz|Austria|Germany)/i.test(l)){
+          res.country=l.split(/\s{3,}/)[0].trim();
+        } else if(!res.taxId&&/^UID:/i.test(l)){
+          res.taxId=l.replace(/^UID:\s*/i,'').trim();
+        } else if(!res.email&&/@/.test(l)){
+          res.email=(l.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';
+        } else if(!res.telefon&&/^\+?\d[\d\s()-]{5,}/.test(l)){
+          res.telefon=(l.match(/^\+?[\d\s()-]+/)||[''])[0].trim();
         }
-        if(!res.country&&/^(Österreich|Deutschland|Schweiz|Austria|Germany)/i.test(l)){res.country=l.split(/\s{2,}/)[0].trim();continue;}
-        if(!res.taxId&&/^UID:/i.test(l)){res.taxId=l.replace(/^UID:\s*/i,'').trim();continue;}
-        if(!res.email&&/@/.test(l)){res.email=(l.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';continue;}
-        if(!res.telefon&&/^\+?\d[\d\s()-]{5,}/.test(l)){res.telefon=(l.match(/^\+?[\d\s()-]+/)||[''])[0].trim();continue;}
       }
     }
   }
@@ -4106,17 +4105,9 @@ function parseInvoiceText(full,leftCol,existingContacts){
     if(m){
       const desc=m[1].trim(),qty=parseDec(m[2]),ep=parseDec(m[3]);
       if(desc.length>=2&&qty>0&&ep>0&&!/^(Zwischensumme|Netto|Gesamt|MwSt|USt|Summe|Rabatt)/i.test(desc)){
-        const item={id:uid(),type:'item',description:desc,quantity:qty,unitPrice:ep};
-        res.items.push(item);
-        // Collect continuation description lines
-        const descParts=[];
-        while(i+1<fullLines.length){
-          const next=fullLines[i+1];
-          if(isStopLine(next)||next.match(itemRx)||norm(next).includes('BESCHREIBUNG'))break;
-          if(next.trim())descParts.push(next.trim());
-          i++;
-        }
-        if(descParts.length)item.description=desc+'\n'+descParts.join('\n');
+        res.items.push({id:uid(),type:'item',description:desc,quantity:qty,unitPrice:ep});
+        // Skip continuation description lines (formatting text, not item data)
+        while(i+1<fullLines.length&&!isStopLine(fullLines[i+1])&&!fullLines[i+1].match(itemRx))i++;
       }
     }
   }
