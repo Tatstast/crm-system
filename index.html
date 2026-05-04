@@ -4031,22 +4031,32 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
   const handleFile=async(file)=>{
     if(!file){setParseErr('Keine Datei ausgewählt.');return;}
     console.log('[Import] handleFile start:',file.name,file.type,file.size);
-    setParsing(true);setParseErr('');setParsed(false);
+    setParsing(true);setParseErr('');setParsed(false);setRawText('');setShowRaw(false);
+    const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+    const isHtml=file.type==='text/html'||/\.html?$/i.test(file.name);
     try{
       let parsedData;
-      const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
-      const isHtml=file.type==='text/html'||/\.html?$/i.test(file.name);
       if(isPdf){
         console.log('[Import] PDF erkannt, lade pdf.js...');
-        const {full,leftCol}=await extractPdfData(file);
-        console.log('[Import] PDF extrahiert, full length:',full.length);
-        setRawText('=== FULL TEXT ===\n'+full.slice(0,1200)+'\n\n=== LEFT COL ===\n'+(leftCol||'').slice(0,600));
+        let full='',leftCol='';
+        try{
+          const res=await extractPdfData(file);
+          full=res.full;leftCol=res.leftCol;
+        }catch(pdfErr){
+          setRawText('[PDF.js Fehler] '+pdfErr.message+'\n\nDatei: '+file.name+' ('+file.type+', '+file.size+' bytes)');
+          throw pdfErr;
+        }
+        const debugLines=full.split('\n').slice(0,60).join('\n');
+        setRawText('=== DATEI ===\n'+file.name+' ('+file.size+' bytes)\n\n=== EXTRAHIERTE ZEILEN (erste 60) ===\n'+(debugLines||'(leer — kein Text extrahiert)')+'\n\n=== LEFT COL (erste 30 Zeilen) ===\n'+(leftCol.split('\n').slice(0,30).join('\n')||'(leer)'));
+        console.log('[Import] PDF full:\n',full);
         parsedData=parseInvoiceText(full,leftCol,contacts);
         console.log('[Import] geparst:',parsedData);
       } else if(isHtml){
         const text=await file.text();
+        setRawText('=== HTML (erste 800 Zeichen) ===\n'+text.slice(0,800));
         parsedData=parseInvoiceHtml(text,contacts);
       } else {
+        setRawText('[Unbekannter Dateityp]\nName: '+file.name+'\nTyp: '+(file.type||'(unbekannt)')+'\nGröße: '+file.size+' bytes');
         setParseErr('Bitte eine PDF- oder HTML-Datei hochladen. Erkannt: '+(file.type||file.name));
         setParsing(false);return;
       }
@@ -4054,7 +4064,8 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
       setParsed(true);
     }catch(e){
       console.error('[Import] Fehler:',e);
-      setParseErr('Fehler: '+(e.message||e.toString())+' — siehe Konsole (F12) für Details.');
+      setParseErr('Fehler: '+(e.message||e.toString()));
+      setRawText(rt=>rt||(('[Fehler]\n'+e.message)));
     }
     setParsing(false);
   };
