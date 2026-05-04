@@ -4020,6 +4020,8 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
   const [dragOver,setDragOver]=useState(false);
   const [contactMatch,setContactMatch]=useState(null);
   const [createContact,setCreateContact]=useState(true);
+  const [rawText,setRawText]=useState('');
+  const [showRaw,setShowRaw]=useState(false);
   const fileInputRef=React.useRef(null);
   const upd=p=>setForm(f=>({...f,...p}));
   const updItem=(idx,p)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,...p}:it)}));
@@ -4038,6 +4040,7 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
         console.log('[Import] PDF erkannt, lade pdf.js...');
         const {full,leftCol}=await extractPdfData(file);
         console.log('[Import] PDF extrahiert, full length:',full.length);
+        setRawText('=== FULL TEXT ===\n'+full.slice(0,1200)+'\n\n=== LEFT COL ===\n'+(leftCol||'').slice(0,600));
         parsedData=parseInvoiceText(full,leftCol,contacts);
         console.log('[Import] geparst:',parsedData);
       } else if(isHtml){
@@ -4123,6 +4126,12 @@ function InvoiceImportModal({contacts, invoiceSettings, quoteSettings, onImport,
           )}
         </div>
         {parseErr&&<div style={{marginBottom:14,padding:'10px 14px',background:'#FEF2F2',borderRadius:8,color:'#C0392B',fontSize:13}}>{parseErr}</div>}
+        {rawText&&<div style={{marginBottom:14}}>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setShowRaw(v=>!v)} style={{marginBottom:6,fontSize:11}}>
+            {showRaw?'▲ Debug-Text ausblenden':'▼ Extrahierter Text (Debug)'}
+          </button>
+          {showRaw&&<textarea readOnly value={rawText} style={{width:'100%',height:160,fontSize:10.5,fontFamily:'monospace',background:'#F5F3F0',border:'1px solid #D5D0CB',borderRadius:8,padding:'8px 10px',resize:'vertical',boxSizing:'border-box',color:'#3a3530'}}/>}
+        </div>}
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
           <div><label style={lbl}>Rechnungsnummer</label><input value={form.number} onChange={e=>upd({number:e.target.value})} placeholder={nextInvoiceNumber(invoiceSettings||{})}/></div>
