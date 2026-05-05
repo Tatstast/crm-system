@@ -1074,6 +1074,12 @@ function AuthScreen({mode, onDone, onReset, onSwitchMode, prefilledInvite}) {
                 }
               </div>
             </div>
+            {!prefilledInvite && (
+              <div style={{background:'rgba(34,211,238,0.08)',border:'1px solid rgba(34,211,238,0.25)',borderRadius:10,padding:'11px 14px',fontSize:12,color:'rgba(186,230,253,0.95)',lineHeight:1.55}}>
+                <strong style={{color:'rgba(186,230,253,1)'}}>📱 Schon ein CRM-Konto auf einem anderen Gerät?</strong><br/>
+                Öffne dort die Sidebar links unten → <strong>"Gerät verbinden / einladen"</strong> → Verbindungs-Link erstellen → Link auf diesem Gerät öffnen. Dann sind alle deine Daten sofort da.
+              </div>
+            )}
             <div>
               <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.25)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>E-Mail-Adresse</div>
               <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="deine@email.at" className="auth-input" type="email" autoFocus={!prefilledInvite}
@@ -1585,10 +1591,19 @@ function InviteManagerModal({masterKey, onClose}) {
       <div className="modal-box" style={{width:520,padding:28}} onClick={e=>e.stopPropagation()}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
           <div>
-            <h2 style={{fontSize:17,fontWeight:700}}>Mitglied einladen</h2>
-            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3,lineHeight:1.5}}>Erstelle einen Einladungs-Token. Mitglied wählt eigenes Passwort und sieht <strong>genau dieselben Daten</strong> wie du.</p>
+            <h2 style={{fontSize:17,fontWeight:700}}>📱 Gerät verbinden oder Mitglied einladen</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3,lineHeight:1.5}}>Erstelle einen Verbindungs-Link. Damit kann <strong>dein eigenes neues Gerät</strong> oder ein <strong>Team-Mitglied</strong> auf <strong>genau dieselben Daten</strong> zugreifen wie hier.</p>
           </div>
           <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{background:'#F0F9FF',border:'1px solid #BAE6FD',borderRadius:10,padding:'12px 14px',marginBottom:16,fontSize:12.5,color:'#0C4A6E',lineHeight:1.55}}>
+          <strong>So einfach geht's:</strong>
+          <ol style={{marginTop:6,marginLeft:18,padding:0,lineHeight:1.7}}>
+            <li>Hier unten <strong>Verbindungs-Link erstellen</strong></li>
+            <li>Link kopieren und auf dem neuen Gerät (oder bei Team-Mitglied) öffnen</li>
+            <li>Dort eigene Email + Passwort wählen → fertig, alle Daten sind da</li>
+          </ol>
         </div>
 
         {!cloudReady && (
@@ -1599,7 +1614,7 @@ function InviteManagerModal({masterKey, onClose}) {
 
         {!token && (
           <button className="btn btn-primary" onClick={generate} disabled={busy||!cloudReady} style={{width:'100%',justifyContent:'center'}}>
-            {busy?'…':<><Icons.Plus/>Einladungs-Token erstellen</>}
+            {busy?'…':<><Icons.Plus/>Verbindungs-Link erstellen</>}
           </button>
         )}
 
@@ -1608,7 +1623,7 @@ function InviteManagerModal({masterKey, onClose}) {
         {token && (<>
           <div style={{padding:'14px 16px',background:'white',borderRadius:11,border:'1.5px solid #E8E4DF',marginBottom:14}}>
             <div style={{fontSize:11,color:'#A8A39D',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
-              <span style={{color:'#16a34a'}}>✦</span> Einladungslink (empfohlen)
+              <span style={{color:'#16a34a'}}>✦</span> Verbindungs-Link (empfohlen)
             </div>
             <div style={{fontSize:12,color:'#3F3A35',wordBreak:'break-all',padding:'8px 10px',background:'#FAFAF8',borderRadius:7,fontFamily:'monospace',lineHeight:1.4,marginBottom:8,maxHeight:80,overflow:'auto'}}>{buildInviteLink(token)}</div>
             <button className="btn btn-primary btn-sm" onClick={copyLink} style={{width:'100%',justifyContent:'center'}}>
@@ -5700,7 +5715,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             {icon:<span style={{fontSize:13}}>🕐</span>,label:'Snapshots',action:()=>setModal('snapshots')},
             {icon:<Icons.Field/>,label:'Felder verwalten',action:()=>setModal('addField')},
             {icon:<Icons.Members/>,label:'Mitglieder',action:()=>setModal('members')},
-            {icon:<Icons.Invite/>,label:'Einladungen',action:()=>setModal('invites')},
+            {icon:<Icons.Invite/>,label:'Gerät verbinden / einladen',action:()=>setModal('invites')},
             {icon:<span style={{fontSize:13}}>⚙</span>,label:'Einstellungen',action:()=>setModal('githubSync')},
             (()=>{
               const sync=getSyncState();
