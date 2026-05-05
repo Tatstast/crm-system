@@ -375,6 +375,39 @@ function buildCrmSummary(state) {
       total:       quoteTotals(q).total,
       date:        q.date,
     })),
+    tasks: (state.todos||[]).map(t=>({
+      id:          t.id,
+      title:       t.text||'',
+      description: t.description||'',
+      status:      t.done?'erledigt':'offen',
+      priority:    t.priority||'',
+      dueDate:     t.dueDate||'',
+      assignedTo:  '',
+      contactName: '',
+      createdAt:   t.createdAt||'',
+      doneAt:      t.doneAt||'',
+    })),
+    notes: [],
+    employees: (state.aiEmployees||[]).map(e=>({
+      id:      e.id,
+      name:    e.name||'',
+      role:    e.plan||e.role||'',
+    })),
+    forms: (state.forms||[]).map(f=>({
+      id:            f.id,
+      title:         f.title||'',
+      slug:          f.slug||'',
+      published:     !!f.published,
+      responseCount: (state.formResponses||[]).filter(r=>r.formId===f.id).length,
+    })),
+    formResponses: (state.formResponses||[]).map(r=>({
+      id:           r.id,
+      formId:       r.formId,
+      formTitle:    r.formTitle||'',
+      contactName:  r.contactName||'',
+      submittedAt:  r.submittedAt||'',
+      read:         !!r.read,
+    })),
   };
 }
 async function pushCrmSummary(state, ghSettings) {
