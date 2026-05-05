@@ -650,7 +650,61 @@ const DEFAULT_INVOICE_SETTINGS = {
   defaultDueDays:14,
   paymentNote:'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer auf folgendes Konto.',
 };
-const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS,invoices:[],invoiceSettings:DEFAULT_INVOICE_SETTINGS,tokens:[]};
+const ONBOARDING_FORM_FIELDS = [
+  {id:'f_name', type:'text', label:'Ihr Name', required:true, help:'Damit ich Ihre Antworten richtig zuordnen kann, geben Sie bitte kurz Ihren Namen ein.'},
+  {id:'f_section_1', type:'section', label:'Kurzer Einstieg'},
+  {id:'f_about', type:'textarea', label:'Worum soll es auf Ihrer Website gehen?', required:true, help:'Beschreiben Sie bitte kurz in 2–3 Sätzen, was Sie anbieten oder worum es bei Ihrer Website geht.'},
+  {id:'f_priority', type:'multiselect', label:'Was ist Ihnen bei der neuen Website am wichtigsten?', required:true, options:['Sie soll professioneller wirken','Sie soll neue Kunden bringen','Sie soll mein Angebot klar erklären','Sie soll moderner aussehen','Sie soll online besser gefunden werden','Etwas anderes']},
+  {id:'f_section_2', type:'section', label:'Domain & Veröffentlichung'},
+  {id:'f_has_domain', type:'select', label:'Haben Sie bereits eine Domain?', required:true, help:'Eine Domain ist Ihre Webadresse, z. B. www.ihrefirma.at.', options:['Ja','Nein','Ich bin mir nicht sicher']},
+  {id:'f_domain_name', type:'text', label:'Falls ja: Wie lautet Ihre Domain?', required:false, placeholder:'www.ihrefirma.at'},
+  {id:'f_domain_provider', type:'text', label:'Falls ja: Bei welchem Anbieter wurde die Domain gekauft?', required:false, help:'Zum Beispiel World4You, IONOS, GoDaddy, Wix, Jimdo, Squarespace, Hostinger usw.'},
+  {id:'f_domain_access', type:'select', label:'Haben Sie Zugriff auf diesen Anbieter?', required:false, options:['Ja','Nein','Ich bin mir nicht sicher']},
+  {id:'f_wish_domain', type:'textarea', label:'Falls Sie noch keine Domain haben: Welche Wunsch-Domain hätten Sie gerne?', required:false, help:'Bitte geben Sie am besten 2–3 Varianten an, falls die erste Domain bereits vergeben ist.'},
+  {id:'f_pw_notice', type:'info', label:'Bitte senden Sie keine Passwörter über dieses Formular. Falls ich Zugriff benötige, klären wir das sicher separat, z. B. über einen temporären Zugang, eine Benutzerfreigabe oder einen Passwortmanager.'},
+  {id:'f_section_3', type:'section', label:'Ziel der Website'},
+  {id:'f_goal', type:'multiselect', label:'Was soll Ihre Website hauptsächlich erreichen?', required:true, options:['Neue Kunden gewinnen','Informationen über mein Unternehmen zeigen','Terminbuchungen ermöglichen','Produkte oder Leistungen präsentieren','Vertrauen aufbauen','Etwas anderes']},
+  {id:'f_audience', type:'text', label:'Wer soll die Website hauptsächlich besuchen?', required:false, help:'Zum Beispiel Privatkunden, Firmenkunden, Patienten, Gäste, Bewerber usw.'},
+  {id:'f_action', type:'multiselect', label:'Was sollen Besucher auf der Website unbedingt tun?', required:true, options:['Anrufen','E-Mail schreiben','Kontaktformular ausfüllen','Termin buchen','Angebot anfragen','Informationen lesen','Etwas anderes']},
+  {id:'f_section_4', type:'section', label:'Unterseiten / Aufbau'},
+  {id:'f_pages', type:'multiselect', label:'Welche Seiten soll Ihre Website ungefähr haben?', required:true, options:['Startseite','Über uns / Über mich','Leistungen / Angebote','Preise','Galerie / Referenzen','Kontakt','Häufige Fragen','Impressum / Datenschutz','Andere']},
+  {id:'f_likes', type:'textarea', label:'Gibt es Websites, die Ihnen gefallen?', required:false, help:'Falls ja, fügen Sie bitte die Links ein. Es reicht auch, wenn Ihnen nur bestimmte Bereiche gefallen.'},
+  {id:'f_dislikes', type:'textarea', label:'Gibt es etwas, das Sie auf Ihrer Website auf keinen Fall möchten?', required:false},
+  {id:'f_section_5', type:'section', label:'Inhalte & Materialien'},
+  {id:'f_texts', type:'select', label:'Haben Sie bereits Texte für die Website?', required:true, options:['Ja, vollständig','Teilweise','Nein, ich brauche Unterstützung']},
+  {id:'f_media', type:'select', label:'Haben Sie Bilder, Logos oder andere Dateien?', required:true, options:['Ja, ich lade sie hoch','Noch nicht','Ich brauche Unterstützung bei Bildern']},
+  {id:'f_logo', type:'file', label:'Logo hochladen', required:false},
+  {id:'f_images', type:'file', label:'Bilder hochladen', required:false, multiple:true},
+  {id:'f_other_files', type:'file', label:'Sonstige Dateien hochladen', required:false, multiple:true},
+  {id:'f_style', type:'textarea', label:'Gibt es bestimmte Farben, Schriften oder einen Stil, den Sie möchten?', required:false, help:'Zum Beispiel modern, schlicht, elegant, freundlich, luxuriös, bodenständig, verspielt oder seriös.'},
+  {id:'f_section_6', type:'section', label:'Angebot / Leistungen'},
+  {id:'f_services', type:'textarea', label:'Welche Leistungen, Produkte oder Angebote sollen auf der Website vorgestellt werden?', required:true},
+  {id:'f_main_service', type:'textarea', label:'Gibt es eine Leistung oder ein Angebot, das besonders wichtig ist?', required:false},
+  {id:'f_show_prices', type:'select', label:'Sollen Preise, Pakete oder Angebote auf der Website genannt werden?', required:true, options:['Ja','Nein','Vielleicht, bitte mit mir besprechen']},
+  {id:'f_section_7', type:'section', label:'Kontaktmöglichkeiten auf der Website'},
+  {id:'f_contact_methods', type:'multiselect', label:'Wie sollen Besucher Sie kontaktieren können?', required:true, options:['Telefon','E-Mail','Kontaktformular','WhatsApp','Terminbuchung','Adresse / Anfahrt','Social Media']},
+  {id:'f_contact_highlight', type:'text', label:'Welche Kontaktmöglichkeit soll besonders hervorgehoben werden?', required:false, help:'Zum Beispiel Telefon, WhatsApp oder Terminbuchung.'},
+  {id:'f_section_8', type:'section', label:'Rechtliches'},
+  {id:'f_legal', type:'select', label:'Haben Sie bereits ein Impressum und eine Datenschutzerklärung?', required:true, options:['Ja','Nein','Ich bin mir nicht sicher']},
+  {id:'f_legal_notice', type:'info', label:'Ich darf keine Rechtsberatung geben. Falls noch keine rechtlichen Texte vorhanden sind, empfehle ich, diese professionell erstellen zu lassen oder einen geeigneten Generator / Anwalt zu nutzen.'},
+  {id:'f_section_9', type:'section', label:'Abschluss'},
+  {id:'f_deadline', type:'text', label:'Gibt es einen gewünschten Fertigstellungstermin?', required:false},
+  {id:'f_other', type:'textarea', label:'Gibt es sonst noch etwas, das ich wissen sollte?', required:false},
+];
+
+const DEFAULT_ONBOARDING_FORM = {
+  id:'form_onboarding',
+  slug:'website-onboarding',
+  title:'Website-Onboarding',
+  intro:'Damit ich Ihre Website optimal planen und gestalten kann, beantworten Sie mir bitte die folgenden Fragen. Dauert ca. 5–10 Minuten — Sie können jederzeit pausieren.',
+  thanks:'Vielen Dank! Ihre Antworten sind angekommen. Ich melde mich in den nächsten Tagen bei Ihnen.',
+  submitEmail:'',
+  fields: ONBOARDING_FORM_FIELDS,
+  createdAt: null,
+  published: false,
+};
+
+const DEFAULT_STATE = {sections:DEFAULT_SECTIONS,subsections:DEFAULT_SUBSECTIONS,contacts:SAMPLE_CONTACTS,customFields:[],members:[],todos:[],aiEmployees:[],claudeAccounts:[],claudeTasks:[],quotes:[],quoteSettings:DEFAULT_QUOTE_SETTINGS,invoices:[],invoiceSettings:DEFAULT_INVOICE_SETTINGS,tokens:[],forms:[DEFAULT_ONBOARDING_FORM],formResponses:[]};
 
 const lbl = {display:'block',fontSize:11,fontWeight:600,color:'#A8A39D',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'};
 
@@ -4849,6 +4903,490 @@ function TokensView({tokens,onUpdate}){
   );
 }
 
+// ── PUBLIC FORM PAGE ─────────────────────────────────────────────
+function PublicFormPage({slug}){
+  const [form,setForm]=useState(null);
+  const [loadErr,setLoadErr]=useState('');
+  const [values,setValues]=useState({});
+  const [submitted,setSubmitted]=useState(false);
+  const [submitting,setSubmitting]=useState(false);
+  const [errors,setErrors]=useState({});
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const url=`forms/${slug}.json?t=${Date.now()}`;
+        const r=await fetch(url,{cache:'no-store'});
+        if(!r.ok){setLoadErr('Dieses Formular wurde nicht gefunden oder ist nicht mehr verfügbar.');return;}
+        const def=await r.json();
+        setForm(def);
+        const v={};(def.fields||[]).forEach(fld=>{if(fld.type==='multiselect')v[fld.id]=[];else v[fld.id]='';});
+        setValues(v);
+      }catch(e){setLoadErr('Formular konnte nicht geladen werden.');}
+    })();
+  },[slug]);
+
+  const setVal=(id,v)=>setValues(s=>({...s,[id]:v}));
+  const toggleMulti=(id,opt)=>setValues(s=>{const arr=s[id]||[];return{...s,[id]:arr.includes(opt)?arr.filter(x=>x!==opt):[...arr,opt]};});
+
+  const validate=()=>{
+    const e={};
+    (form.fields||[]).forEach(fld=>{
+      if(!fld.required||fld.type==='section'||fld.type==='info'||fld.type==='file')return;
+      const v=values[fld.id];
+      if(fld.type==='multiselect'){if(!v||v.length===0)e[fld.id]='Bitte mindestens eine Option auswählen.';}
+      else if(!v||(typeof v==='string'&&!v.trim()))e[fld.id]='Pflichtfeld.';
+    });
+    return e;
+  };
+
+  const handleSubmit=async(ev)=>{
+    ev.preventDefault();
+    const e=validate();
+    setErrors(e);
+    if(Object.keys(e).length>0){
+      const firstErr=document.querySelector('[data-field-err="true"]');
+      if(firstErr)firstErr.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+    if(!form.submitEmail){setLoadErr('Diesem Formular fehlt eine Empfänger-Email — bitte den Betreiber informieren.');return;}
+    setSubmitting(true);
+    try{
+      const fd=new FormData();
+      // Subject + Antworten in lesbarer Form
+      const nameField=(form.fields||[]).find(f=>/name/i.test(f.label||''))||form.fields[0];
+      const senderName=nameField?values[nameField.id]:'Unbekannt';
+      fd.append('_subject',`Neue Antwort: ${form.title} — ${senderName||'Anonym'}`);
+      fd.append('_template','table');
+      fd.append('_captcha','false');
+      // Felder
+      (form.fields||[]).forEach(fld=>{
+        if(fld.type==='section'||fld.type==='info')return;
+        const v=values[fld.id];
+        if(fld.type==='file'){
+          const files=v;
+          if(files&&files.length){
+            for(let i=0;i<files.length;i++)fd.append(`${fld.label||fld.id} (Datei ${i+1})`,files[i]);
+          }
+        }else{
+          fd.append(fld.label||fld.id,Array.isArray(v)?v.join(', '):(v||''));
+        }
+      });
+      // Import-Link für CRM
+      const exportData={};
+      (form.fields||[]).forEach(fld=>{if(fld.type!=='section'&&fld.type!=='info'&&fld.type!=='file')exportData[fld.id]=values[fld.id];});
+      const importPayload={formSlug:form.slug,formTitle:form.title,contactName:senderName||'Anonym',data:exportData,submittedAt:new Date().toISOString()};
+      const b64=btoa(unescape(encodeURIComponent(JSON.stringify(importPayload))));
+      const importLink=`${window.location.origin}${window.location.pathname.replace(/\/$/,'')}/?formresponse=${b64}`;
+      fd.append('🔗 In CRM importieren',importLink);
+
+      const r=await fetch(`https://formsubmit.co/${encodeURIComponent(form.submitEmail)}`,{method:'POST',body:fd});
+      if(!r.ok)throw new Error('Server-Fehler '+r.status);
+      setSubmitted(true);
+      window.scrollTo(0,0);
+    }catch(err){
+      setLoadErr('Antwort konnte nicht gesendet werden: '+err.message+'. Bitte später erneut versuchen.');
+    }
+    setSubmitting(false);
+  };
+
+  if(loadErr)return(<div style={{minHeight:'100vh',background:'#F3F0EB',display:'flex',alignItems:'center',justifyContent:'center',padding:24,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}}><div style={{maxWidth:500,background:'white',borderRadius:14,padding:'32px 28px',textAlign:'center'}}><div style={{fontSize:42,marginBottom:14}}>📭</div><div style={{fontSize:16,fontWeight:600,color:'#141210',marginBottom:8}}>Formular nicht verfügbar</div><div style={{fontSize:13.5,color:'#6B6560',lineHeight:1.6}}>{loadErr}</div></div></div>);
+  if(!form)return(<div style={{minHeight:'100vh',background:'#F3F0EB',display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{width:28,height:28,border:'2.5px solid rgba(0,0,0,.1)',borderTopColor:'#141210',borderRadius:'50%',animation:'spin .7s linear infinite',display:'block'}}></span></div>);
+  if(submitted)return(<div style={{minHeight:'100vh',background:'#F3F0EB',display:'flex',alignItems:'center',justifyContent:'center',padding:24,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}}><div style={{maxWidth:540,background:'white',borderRadius:14,padding:'40px 32px',textAlign:'center',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}><div style={{fontSize:48,marginBottom:18}}>✓</div><div style={{fontSize:20,fontWeight:700,color:'#141210',marginBottom:12}}>Erfolgreich gesendet!</div><div style={{fontSize:14,color:'#6B6560',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{form.thanks||'Vielen Dank für Ihre Antworten!'}</div></div></div>);
+
+  return(
+    <div style={{minHeight:'100vh',background:'#F3F0EB',padding:'40px 16px',fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif'}}>
+      <div style={{maxWidth:680,margin:'0 auto'}}>
+        <div style={{background:'white',borderRadius:14,padding:'32px 28px',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
+          <h1 style={{fontSize:24,fontWeight:800,color:'#141210',marginBottom:10,letterSpacing:'-0.02em'}}>{form.title}</h1>
+          {form.intro&&<p style={{fontSize:14,color:'#6B6560',lineHeight:1.65,marginBottom:24,whiteSpace:'pre-wrap'}}>{form.intro}</p>}
+          <form onSubmit={handleSubmit}>
+            {(form.fields||[]).map(fld=>{
+              const err=errors[fld.id];
+              const errMark=err?{'data-field-err':'true'}:{};
+              if(fld.type==='section')return(<div key={fld.id} style={{marginTop:32,marginBottom:14,paddingBottom:8,borderBottom:'2px solid #141210'}}><div style={{fontSize:13,fontWeight:800,color:'#141210',textTransform:'uppercase',letterSpacing:'0.08em'}}>{fld.label}</div></div>);
+              if(fld.type==='info')return(<div key={fld.id} style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:10,padding:'12px 16px',marginBottom:18,fontSize:13,color:'#9A3412',lineHeight:1.55}}>{fld.label}</div>);
+              return(
+                <div key={fld.id} style={{marginBottom:20}} {...errMark}>
+                  <label style={{display:'block',fontSize:14,fontWeight:600,color:'#141210',marginBottom:6}}>
+                    {fld.label}{fld.required&&<span style={{color:'#dc2626',marginLeft:3}}>*</span>}
+                  </label>
+                  {fld.help&&<div style={{fontSize:12.5,color:'#6B6560',marginBottom:8,lineHeight:1.5}}>{fld.help}</div>}
+                  {fld.type==='text'&&<input type="text" value={values[fld.id]||''} onChange={e=>setVal(fld.id,e.target.value)} placeholder={fld.placeholder||''} style={{width:'100%',padding:'10px 12px',border:'1px solid '+(err?'#dc2626':'#D4CEC8'),borderRadius:8,fontSize:14,fontFamily:'inherit'}}/>}
+                  {fld.type==='textarea'&&<textarea value={values[fld.id]||''} onChange={e=>setVal(fld.id,e.target.value)} rows={4} style={{width:'100%',padding:'10px 12px',border:'1px solid '+(err?'#dc2626':'#D4CEC8'),borderRadius:8,fontSize:14,fontFamily:'inherit',resize:'vertical'}}/>}
+                  {fld.type==='select'&&(
+                    <div style={{display:'grid',gap:6}}>
+                      {(fld.options||[]).map(opt=>(
+                        <label key={opt} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:values[fld.id]===opt?'#141210':'#FAFAF8',color:values[fld.id]===opt?'white':'#141210',border:'1px solid '+(values[fld.id]===opt?'#141210':'#E8E4DF'),borderRadius:8,cursor:'pointer',fontSize:14,transition:'all .12s'}}>
+                          <input type="radio" name={fld.id} checked={values[fld.id]===opt} onChange={()=>setVal(fld.id,opt)} style={{accentColor:'#141210'}}/>
+                          <span>{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {fld.type==='multiselect'&&(
+                    <div style={{display:'grid',gap:6}}>
+                      {(fld.options||[]).map(opt=>{
+                        const checked=(values[fld.id]||[]).includes(opt);
+                        return(
+                          <label key={opt} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:checked?'#141210':'#FAFAF8',color:checked?'white':'#141210',border:'1px solid '+(checked?'#141210':'#E8E4DF'),borderRadius:8,cursor:'pointer',fontSize:14,transition:'all .12s'}}>
+                            <input type="checkbox" checked={checked} onChange={()=>toggleMulti(fld.id,opt)} style={{accentColor:checked?'white':'#141210'}}/>
+                            <span>{opt}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {fld.type==='file'&&(
+                    <input type="file" multiple={fld.multiple} onChange={e=>setVal(fld.id,e.target.files)} style={{width:'100%',padding:10,border:'1px dashed #D4CEC8',borderRadius:8,fontSize:13,background:'#FAFAF8',cursor:'pointer'}}/>
+                  )}
+                  {err&&<div style={{fontSize:12.5,color:'#dc2626',marginTop:6}}>{err}</div>}
+                </div>
+              );
+            })}
+            <button type="submit" disabled={submitting} style={{width:'100%',marginTop:20,padding:'14px',background:'#141210',color:'white',border:'none',borderRadius:10,fontSize:15,fontWeight:700,cursor:submitting?'wait':'pointer',transition:'opacity .15s',opacity:submitting?.6:1}}>{submitting?'Wird gesendet…':'Absenden'}</button>
+            <div style={{textAlign:'center',marginTop:14,fontSize:11.5,color:'#A8A39D'}}>Ihre Antworten werden verschlüsselt übertragen.</div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── FORMS ────────────────────────────────────────────────────────
+async function publishFormToGithub(form, ghSettings){
+  if(!ghSettings)throw new Error('Cloud-Sync muss verbunden sein, um Formulare zu veröffentlichen.');
+  const path=`forms/${form.slug}.json`;
+  const publicForm={slug:form.slug,title:form.title,intro:form.intro||'',thanks:form.thanks||'',submitEmail:form.submitEmail||'',fields:form.fields||[]};
+  const content=JSON.stringify(publicForm,null,2);
+  // Get current SHA if exists
+  let sha=null;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/${path}`,{headers:{Authorization:`Bearer ${ghSettings.token}`,Accept:'application/vnd.github+json'}});
+    if(r.ok){const j=await r.json();sha=j.sha;}
+  }catch(e){}
+  const body={message:`Update form: ${form.slug}`,content:btoa(unescape(encodeURIComponent(content)))};
+  if(sha)body.sha=sha;
+  const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/${path}`,{method:'PUT',headers:{Authorization:`Bearer ${ghSettings.token}`,'Content-Type':'application/json',Accept:'application/vnd.github+json'},body:JSON.stringify(body)});
+  if(!r.ok){const t=await r.text();throw new Error(`GitHub Fehler ${r.status}: ${t.slice(0,120)}`);}
+}
+
+async function unpublishFormFromGithub(form, ghSettings){
+  if(!ghSettings)return;
+  const path=`forms/${form.slug}.json`;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/${path}`,{headers:{Authorization:`Bearer ${ghSettings.token}`,Accept:'application/vnd.github+json'}});
+    if(!r.ok)return;
+    const j=await r.json();
+    await fetch(`https://api.github.com/repos/${ghSettings.repo}/contents/${path}`,{method:'DELETE',headers:{Authorization:`Bearer ${ghSettings.token}`,'Content-Type':'application/json',Accept:'application/vnd.github+json'},body:JSON.stringify({message:`Unpublish form: ${form.slug}`,sha:j.sha})});
+  }catch(e){}
+}
+
+function formPublicUrl(slug){
+  const base=window.location.origin+window.location.pathname.replace(/\/$/,'');
+  return `${base}/?form=${encodeURIComponent(slug)}`;
+}
+
+function FormsView({forms, responses, ghSettings, onUpdateForms, onUpdateResponses}){
+  const [tab,setTab]=useState('forms');
+  const [editingForm,setEditingForm]=useState(null);
+  const [viewingResponse,setViewingResponse]=useState(null);
+  const [busy,setBusy]=useState(null);
+  const [msg,setMsg]=useState('');
+
+  const newForm=()=>{
+    setEditingForm({id:'form_'+uid(),slug:'neues-formular-'+uid().slice(0,4),title:'Neues Formular',intro:'',thanks:'Vielen Dank für Ihre Antworten!',submitEmail:'',fields:[],createdAt:new Date().toISOString(),published:false});
+  };
+  const saveForm=async(form,doPublish)=>{
+    const exists=forms.some(f=>f.id===form.id);
+    let updated={...form};
+    if(doPublish){
+      try{
+        setBusy('publish');setMsg('');
+        await publishFormToGithub(form,ghSettings);
+        updated={...updated,published:true,publishedAt:new Date().toISOString()};
+        setMsg('✓ Formular veröffentlicht.');
+      }catch(e){setMsg('Fehler: '+e.message);setBusy(null);return;}
+      setBusy(null);
+    }
+    onUpdateForms(exists?forms.map(f=>f.id===form.id?updated:f):[...forms,updated]);
+    setEditingForm(null);
+  };
+  const deleteForm=async(form)=>{
+    if(!window.confirm(`Formular "${form.title}" wirklich löschen?`))return;
+    if(form.published&&ghSettings){try{await unpublishFormFromGithub(form,ghSettings);}catch(e){}}
+    onUpdateForms(forms.filter(f=>f.id!==form.id));
+  };
+  const togglePublish=async(form)=>{
+    if(form.published){
+      if(!window.confirm('Formular vom Internet entfernen? Bestehende Antworten bleiben erhalten.'))return;
+      try{setBusy('publish');await unpublishFormFromGithub(form,ghSettings);onUpdateForms(forms.map(f=>f.id===form.id?{...f,published:false}:f));setMsg('Formular ist nicht mehr öffentlich.');}
+      catch(e){setMsg('Fehler: '+e.message);}
+      setBusy(null);
+    }else{
+      if(!form.submitEmail){setMsg('Bitte zuerst Empfänger-Email im Formular eintragen.');return;}
+      try{setBusy('publish');await publishFormToGithub(form,ghSettings);onUpdateForms(forms.map(f=>f.id===form.id?{...f,published:true,publishedAt:new Date().toISOString()}:f));setMsg('✓ Formular ist jetzt öffentlich.');}
+      catch(e){setMsg('Fehler: '+e.message);}
+      setBusy(null);
+    }
+  };
+  const copyLink=(slug)=>{
+    navigator.clipboard?.writeText(formPublicUrl(slug));
+    setMsg('Link kopiert.');setTimeout(()=>setMsg(''),2000);
+  };
+  const markRead=(r)=>{onUpdateResponses(responses.map(x=>x.id===r.id?{...x,read:true}:x));};
+  const deleteResponse=(r)=>{if(window.confirm('Antwort wirklich löschen?'))onUpdateResponses(responses.filter(x=>x.id!==r.id));};
+
+  return(<>
+    <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+      <div style={{flex:1}}>
+        <h1 style={{fontSize:18,fontWeight:800,letterSpacing:'-0.02em'}}>Formulare</h1>
+        <div style={{fontSize:12,color:'#B0ABA5',marginTop:2,display:'flex',gap:12}}>
+          <span>{forms.length} {forms.length===1?'Formular':'Formulare'}</span>
+          <span>· {responses.length} {responses.length===1?'Antwort':'Antworten'}</span>
+          {responses.filter(r=>!r.read).length>0&&<span style={{color:'#16a34a',fontWeight:600}}>· {responses.filter(r=>!r.read).length} neu</span>}
+        </div>
+      </div>
+      <div style={{display:'inline-flex',background:'#F5F3F0',borderRadius:10,padding:3}}>
+        <button onClick={()=>setTab('forms')} style={{padding:'7px 14px',borderRadius:8,fontSize:12.5,fontWeight:600,border:'none',cursor:'pointer',background:tab==='forms'?'white':'transparent',color:tab==='forms'?'#141210':'#A8A39D',boxShadow:tab==='forms'?'0 1px 2px rgba(0,0,0,.05)':'none'}}>Formulare</button>
+        <button onClick={()=>setTab('responses')} style={{padding:'7px 14px',borderRadius:8,fontSize:12.5,fontWeight:600,border:'none',cursor:'pointer',background:tab==='responses'?'white':'transparent',color:tab==='responses'?'#141210':'#A8A39D',boxShadow:tab==='responses'?'0 1px 2px rgba(0,0,0,.05)':'none'}}>Antworten {responses.filter(r=>!r.read).length>0&&`(${responses.filter(r=>!r.read).length})`}</button>
+      </div>
+      {tab==='forms'&&<button className="btn btn-primary btn-sm" onClick={newForm}><Icons.Plus/>Neues Formular</button>}
+    </div>
+    {msg&&<div style={{padding:'10px 28px',fontSize:12.5,color:msg.startsWith('Fehler')?'#C0392B':'#16a34a',background:msg.startsWith('Fehler')?'#FEF2F2':'#F0FDF4',borderBottom:'1px solid rgba(0,0,0,.05)'}}>{msg}</div>}
+
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
+      {tab==='forms'?(
+        forms.length===0?(
+          <div style={{textAlign:'center',padding:'60px 20px',color:'#A8A39D'}}>
+            <div style={{fontSize:42,marginBottom:14}}>📋</div>
+            <div style={{fontWeight:600,fontSize:15,color:'#6B6560',marginBottom:6}}>Noch kein Formular</div>
+            <div style={{fontSize:13,marginBottom:18}}>Erstelle ein Formular, das du an Kunden zum Ausfüllen weitergeben kannst.</div>
+            <button className="btn btn-primary" onClick={newForm}><Icons.Plus/>Erstes Formular erstellen</button>
+          </div>
+        ):(
+          <div style={{display:'grid',gap:12}}>
+            {forms.map(f=>{
+              const responseCount=responses.filter(r=>r.formId===f.id).length;
+              return(
+                <div key={f.id} style={{background:'white',border:'1px solid rgba(0,0,0,.07)',borderRadius:12,padding:'16px 18px'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:14}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                        <div style={{fontWeight:700,fontSize:15,color:'#141210'}}>{f.title}</div>
+                        {f.published?(
+                          <span style={{fontSize:10.5,fontWeight:700,color:'#16a34a',background:'#F0FDF4',padding:'2px 8px',borderRadius:99,border:'1px solid #BBF7D0'}}>● ÖFFENTLICH</span>
+                        ):(
+                          <span style={{fontSize:10.5,fontWeight:700,color:'#A8A39D',background:'#F5F3F0',padding:'2px 8px',borderRadius:99}}>ENTWURF</span>
+                        )}
+                      </div>
+                      <div style={{fontSize:12,color:'#A8A39D',marginBottom:8}}>{(f.fields||[]).filter(x=>x.type!=='section'&&x.type!=='info').length} Felder · {responseCount} {responseCount===1?'Antwort':'Antworten'}{f.submitEmail&&` · → ${f.submitEmail}`}</div>
+                      {f.published&&(
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
+                          <code style={{flex:1,background:'#FAFAF8',padding:'5px 9px',borderRadius:6,fontSize:11,border:'1px solid #E8E4DF',wordBreak:'break-all',color:'#3F3A35'}}>{formPublicUrl(f.slug)}</code>
+                          <button className="btn btn-ghost btn-sm" onClick={()=>copyLink(f.slug)} style={{flexShrink:0,fontSize:11}}>Kopieren</button>
+                          <a className="btn btn-ghost btn-sm" href={formPublicUrl(f.slug)} target="_blank" rel="noopener" style={{flexShrink:0,fontSize:11,textDecoration:'none'}}>Öffnen</a>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{display:'flex',gap:6,flexShrink:0}}>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setEditingForm(f)} disabled={busy}>Bearbeiten</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>togglePublish(f)} disabled={busy} style={f.published?{}:{color:'#16a34a',fontWeight:600}}>{busy==='publish'?'…':f.published?'Offline nehmen':'Veröffentlichen'}</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>deleteForm(f)} disabled={busy}>Löschen</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      ):(
+        responses.length===0?(
+          <div style={{textAlign:'center',padding:'60px 20px',color:'#A8A39D'}}>
+            <div style={{fontSize:42,marginBottom:14}}>📭</div>
+            <div style={{fontWeight:600,fontSize:15,color:'#6B6560',marginBottom:6}}>Noch keine Antworten</div>
+            <div style={{fontSize:13}}>Sobald jemand dein Formular ausfüllt, erscheinen die Antworten hier.</div>
+          </div>
+        ):(
+          <div style={{display:'grid',gap:8}}>
+            {[...responses].sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||'')).map(r=>{
+              const form=forms.find(f=>f.id===r.formId);
+              const date=r.submittedAt?new Date(r.submittedAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+              return(
+                <div key={r.id} onClick={()=>{setViewingResponse(r);if(!r.read)markRead(r);}} style={{background:'white',border:'1px solid rgba(0,0,0,.07)',borderRadius:10,padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:14,transition:'border-color .12s'}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor='#D4CEC8'}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(0,0,0,.07)'}>
+                  {!r.read&&<span style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,color:'#141210'}}>{r.contactName||'Anonym'}</div>
+                    <div style={{fontSize:11.5,color:'#A8A39D',marginTop:2}}>{form?.title||r.formTitle||'Formular'} · {date}</div>
+                  </div>
+                  <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteResponse(r);}}>Löschen</button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+    {editingForm&&<FormEditorModal form={editingForm} ghSettings={ghSettings} onSave={saveForm} onClose={()=>setEditingForm(null)}/>}
+    {viewingResponse&&<ResponseViewerModal response={viewingResponse} form={forms.find(f=>f.id===viewingResponse.formId)} onClose={()=>setViewingResponse(null)}/>}
+  </>);
+}
+
+function FormEditorModal({form, ghSettings, onSave, onClose}){
+  const [f,setF]=useState({...form,fields:[...(form.fields||[])]});
+  const [saving,setSaving]=useState(false);
+  const fieldTypes=[
+    {v:'text',l:'Kurzer Text'},
+    {v:'textarea',l:'Langer Text'},
+    {v:'select',l:'Einzelauswahl'},
+    {v:'multiselect',l:'Mehrfachauswahl'},
+    {v:'file',l:'Datei-Upload'},
+    {v:'section',l:'Abschnittsüberschrift'},
+    {v:'info',l:'Hinweis-Text'},
+  ];
+  const updField=(idx,patch)=>setF(s=>({...s,fields:s.fields.map((x,i)=>i===idx?{...x,...patch}:x)}));
+  const removeField=idx=>setF(s=>({...s,fields:s.fields.filter((_,i)=>i!==idx)}));
+  const addField=t=>setF(s=>({...s,fields:[...s.fields,{id:'fld_'+uid(),type:t,label:'',required:false,...(t==='select'||t==='multiselect'?{options:['Option 1']}:{})}]}));
+  const moveField=(idx,dir)=>{const j=idx+dir;if(j<0||j>=f.fields.length)return;const a=[...f.fields];[a[idx],a[j]]=[a[j],a[idx]];setF({...f,fields:a});};
+  const slugify=s=>s.toLowerCase().replace(/[äöü]/g,m=>({ä:'ae',ö:'oe',ü:'ue'}[m])).replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+  const handleSave=async(publish)=>{
+    if(!f.title.trim()){alert('Titel fehlt');return;}
+    if(!f.slug.trim()){alert('Slug fehlt');return;}
+    if(publish&&!f.submitEmail.trim()){alert('Empfänger-Email fehlt — wird benötigt für die Antworten.');return;}
+    setSaving(true);
+    await onSave(f,publish);
+    setSaving(false);
+  };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:780,maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16,flexShrink:0}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700}}>Formular bearbeiten</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>Felder hinzufügen, anordnen, dann veröffentlichen.</p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+
+        <div style={{overflowY:'auto',flex:1,paddingRight:6}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+            <div>
+              <div style={lbl}>Titel</div>
+              <input value={f.title} onChange={e=>setF({...f,title:e.target.value,slug:f.slug||slugify(e.target.value)})}/>
+            </div>
+            <div>
+              <div style={lbl}>URL-Slug</div>
+              <input value={f.slug} onChange={e=>setF({...f,slug:slugify(e.target.value)})} style={{fontFamily:'monospace',fontSize:12.5}}/>
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={lbl}>Empfänger-Email (wohin Antworten geschickt werden) *</div>
+            <input value={f.submitEmail} onChange={e=>setF({...f,submitEmail:e.target.value})} placeholder="deine-email@beispiel.at" type="email"/>
+            <div style={{fontSize:11,color:'#A8A39D',marginTop:4,lineHeight:1.5}}>Antworten kommen via FormSubmit.co an diese Email. Beim ersten Eingang musst du die Email einmal bestätigen.</div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={lbl}>Einleitungstext (oben im Formular)</div>
+            <textarea value={f.intro||''} onChange={e=>setF({...f,intro:e.target.value})} rows={2}/>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={lbl}>Danke-Text (nach dem Absenden)</div>
+            <textarea value={f.thanks||''} onChange={e=>setF({...f,thanks:e.target.value})} rows={2}/>
+          </div>
+
+          <div style={{borderTop:'1px solid #F0EDE8',paddingTop:14,marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>Felder ({f.fields.length})</div>
+            {f.fields.map((fld,idx)=>(
+              <div key={fld.id} style={{background:fld.type==='section'?'#F0EDE8':'#FAFAF8',border:'1px solid #E8E4DF',borderRadius:9,padding:10,marginBottom:8}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:6}}>
+                  <select value={fld.type} onChange={e=>updField(idx,{type:e.target.value})} style={{width:160,fontSize:12}}>
+                    {fieldTypes.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+                  </select>
+                  <input value={fld.label||''} onChange={e=>updField(idx,{label:e.target.value})} placeholder={fld.type==='section'?'Abschnittstitel':fld.type==='info'?'Hinweistext':'Feldbezeichnung'} style={{flex:1,fontSize:12.5}}/>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>moveField(idx,-1)} disabled={idx===0} style={{padding:'4px 8px'}}>↑</button>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>moveField(idx,1)} disabled={idx===f.fields.length-1} style={{padding:'4px 8px'}}>↓</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>removeField(idx)} style={{padding:'4px 8px'}}>×</button>
+                </div>
+                {fld.type!=='section'&&fld.type!=='info'&&(
+                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <label style={{fontSize:11.5,display:'flex',alignItems:'center',gap:5,cursor:'pointer'}}>
+                      <input type="checkbox" checked={!!fld.required} onChange={e=>updField(idx,{required:e.target.checked})}/>
+                      Pflichtfeld
+                    </label>
+                    {(fld.type==='text'||fld.type==='textarea')&&(
+                      <input value={fld.help||''} onChange={e=>updField(idx,{help:e.target.value})} placeholder="Hilfetext (optional)" style={{flex:1,minWidth:200,fontSize:11.5}}/>
+                    )}
+                  </div>
+                )}
+                {(fld.type==='select'||fld.type==='multiselect')&&(
+                  <div style={{marginTop:6}}>
+                    <div style={{fontSize:10.5,color:'#A8A39D',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Optionen (eine pro Zeile)</div>
+                    <textarea value={(fld.options||[]).join('\n')} onChange={e=>updField(idx,{options:e.target.value.split('\n').map(s=>s.trim()).filter(Boolean)})} rows={Math.min(6,(fld.options||[]).length+1)} style={{fontSize:12,fontFamily:'monospace'}}/>
+                  </div>
+                )}
+                {fld.help&&fld.type!=='section'&&fld.type!=='info'&&(fld.type==='select'||fld.type==='multiselect'||fld.type==='file')&&(
+                  <input value={fld.help||''} onChange={e=>updField(idx,{help:e.target.value})} placeholder="Hilfetext" style={{marginTop:6,fontSize:11.5}}/>
+                )}
+              </div>
+            ))}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>
+              {fieldTypes.map(t=>(
+                <button key={t.v} className="btn btn-ghost btn-sm" onClick={()=>addField(t.v)} style={{fontSize:11.5}}>+ {t.l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:14,borderTop:'1px solid #F0EDE8',flexShrink:0}}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Abbrechen</button>
+          <button className="btn btn-ghost" onClick={()=>handleSave(false)} disabled={saving}>Nur speichern</button>
+          <button className="btn btn-primary" onClick={()=>handleSave(true)} disabled={saving||!ghSettings}>{saving?'…':form.published?'Speichern & neu veröffentlichen':'Speichern & veröffentlichen'}</button>
+        </div>
+        {!ghSettings&&<div style={{fontSize:11.5,color:'#9A3412',marginTop:8,textAlign:'right'}}>Cloud-Sync muss verbunden sein, um zu veröffentlichen.</div>}
+      </div>
+    </div>
+  );
+}
+
+function ResponseViewerModal({response, form, onClose}){
+  const fields=form?.fields||[];
+  const data=response.data||{};
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:680,maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexShrink:0}}>
+          <div>
+            <h2 style={{fontSize:17,fontWeight:700}}>{response.contactName||'Antwort'}</h2>
+            <p style={{fontSize:12.5,color:'#A8A39D',marginTop:3}}>
+              {form?.title||response.formTitle} · {response.submittedAt?new Date(response.submittedAt).toLocaleString('de-DE'):''}
+            </p>
+          </div>
+          <button onClick={onClose} style={{background:'#F5F3F0',border:'none',borderRadius:8,padding:8,color:'#999',lineHeight:0}}><Icons.Close/></button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,paddingRight:6}}>
+          {fields.length>0?fields.filter(fld=>fld.type!=='info').map(fld=>{
+            if(fld.type==='section')return(<div key={fld.id} style={{fontSize:11,fontWeight:700,color:'#A8A39D',textTransform:'uppercase',letterSpacing:'0.06em',marginTop:18,marginBottom:8,paddingBottom:6,borderBottom:'1px solid #F0EDE8'}}>{fld.label}</div>);
+            const v=data[fld.id];
+            const display=Array.isArray(v)?v.join(', '):(v||'—');
+            return(
+              <div key={fld.id} style={{marginBottom:14}}>
+                <div style={{fontSize:11.5,fontWeight:600,color:'#6B6560',marginBottom:3}}>{fld.label}</div>
+                <div style={{fontSize:13.5,color:'#141210',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{display||'—'}</div>
+              </div>
+            );
+          }):Object.entries(data).map(([k,v])=>(
+            <div key={k} style={{marginBottom:12}}>
+              <div style={{fontSize:11.5,fontWeight:600,color:'#6B6560',marginBottom:3}}>{k}</div>
+              <div style={{fontSize:13.5,color:'#141210',whiteSpace:'pre-wrap'}}>{Array.isArray(v)?v.join(', '):(v||'—')}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const [state,setState]=useState(()=>({
     ...initialData,
@@ -4863,6 +5401,8 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     invoices: initialData.invoices || [],
     invoiceSettings: {...DEFAULT_INVOICE_SETTINGS,...(initialData.invoiceSettings||{})},
     tokens: initialData.tokens || [],
+    forms: initialData.forms && initialData.forms.length ? initialData.forms : [DEFAULT_ONBOARDING_FORM],
+    formResponses: initialData.formResponses || [],
   }));
   const TODOS_VIEW = '__todos__';
   const AI_VIEW = '__ai__';
@@ -4870,6 +5410,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const QUOTES_VIEW = '__quotes__';
   const INVOICES_VIEW = '__invoices__';
   const TOKENS_VIEW = '__tokens__';
+  const FORMS_VIEW = '__forms__';
   const [activeId,setActiveId]=useState(initialData.sections[0]?.id);
   const [activeSubId,setActiveSubId]=useState(null);
   const [search,setSearch]=useState('');
@@ -4886,6 +5427,28 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
   const [editingInvoice,setEditingInvoice]=useState(null);
   const [previewInvoice,setPreviewInvoice]=useState(null);
   const [jarvisDraft,setJarvisDraft]=useState(null);
+
+  // Deep-link handler: ?formresponse=BASE64 (from public form submission)
+  useEffect(()=>{
+    try{
+      const params=new URLSearchParams(window.location.search);
+      const fr=params.get('formresponse');
+      if(!fr)return;
+      window.history.replaceState({},'',window.location.pathname);
+      const payload=JSON.parse(decodeURIComponent(escape(atob(fr))));
+      const matchingForm=(state.forms||[]).find(f=>f.slug===payload.formSlug);
+      const exists=(state.formResponses||[]).some(r=>r.submittedAt===payload.submittedAt&&r.contactName===payload.contactName);
+      if(!exists){
+        const response={id:'resp_'+uid(),formId:matchingForm?.id||null,formSlug:payload.formSlug,formTitle:payload.formTitle,contactName:payload.contactName,data:payload.data,submittedAt:payload.submittedAt,read:false};
+        upd({formResponses:[...(state.formResponses||[]),response]});
+        setActiveId(FORMS_VIEW);
+        setTimeout(()=>alert(`Antwort von "${payload.contactName}" wurde importiert.`),100);
+      }else{
+        setActiveId(FORMS_VIEW);
+        setTimeout(()=>alert('Diese Antwort wurde bereits importiert.'),100);
+      }
+    }catch(e){console.warn('formresponse import failed:',e);}
+  },[]);
 
   // Deep-link handler: ?draft=BASE64JSON (from Jarvis)
   useEffect(()=>{
@@ -4926,7 +5489,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
     const fresh=await ghCheckForUpdates(cryptoKey);
     if(fresh){
       skipNextSaveRef.current=true;
-      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[], quotes:fresh.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(fresh.quoteSettings||{})}, invoices:fresh.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(fresh.invoiceSettings||{})}, tokens:fresh.tokens||[]}));
+      setState(s=>({...fresh, subsections:fresh.subsections||DEFAULT_SUBSECTIONS, members:fresh.members||[], todos:fresh.todos||[], aiEmployees:fresh.aiEmployees||[], claudeAccounts:fresh.claudeAccounts||[], claudeTasks:fresh.claudeTasks||[], quotes:fresh.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(fresh.quoteSettings||{})}, invoices:fresh.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(fresh.invoiceSettings||{})}, tokens:fresh.tokens||[], forms:fresh.forms&&fresh.forms.length?fresh.forms:[DEFAULT_ONBOARDING_FORM], formResponses:fresh.formResponses||[]}));
       return true;
     }
     return false;
@@ -5060,6 +5623,17 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
               {count>0&&!overdue&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{count}</span>}
             </button>
           );})()}
+          {/* Formulare */}
+          {(()=>{const isActive=activeId===FORMS_VIEW;const fcount=(state.forms||[]).length;const rcount=(state.formResponses||[]).filter(r=>!r.read).length;return(
+            <button onClick={()=>setActiveId(FORMS_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
+              onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,.05)';}}
+              onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:13,width:18,textAlign:'center',flexShrink:0,opacity:isActive?1:.5}}>📋</span>
+              <span style={{flex:1,fontSize:13.5,fontWeight:isActive?600:400,color:isActive?'white':'rgba(255,255,255,.5)',textAlign:'left',letterSpacing:'-0.01em'}}>Formulare</span>
+              {rcount>0&&<span style={{fontSize:10,fontWeight:700,color:'#22c55e',background:'rgba(34,197,94,.15)',borderRadius:99,padding:'1px 6px'}}>{rcount}</span>}
+              {fcount>0&&!rcount&&<span style={{fontSize:11,color:'rgba(255,255,255,.25)',fontWeight:500}}>{fcount}</span>}
+            </button>
+          );})()}
           {/* Tokens */}
           {(()=>{const isActive=activeId===TOKENS_VIEW;const count=(state.tokens||[]).length;return(
             <button onClick={()=>setActiveId(TOKENS_VIEW)} style={{display:'flex',alignItems:'center',width:'100%',padding:'9px 10px',borderRadius:9,background:isActive?'rgba(255,255,255,.1)':'transparent',border:'none',cursor:'pointer',gap:10,marginBottom:2,transition:'background .12s'}}
@@ -5190,6 +5764,14 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
             onDelete={(id)=>upd({quotes:(state.quotes||[]).filter(q=>q.id!==id)})}
             onSettings={()=>setModal('quoteSettings')}
           />
+        </>) : activeId === FORMS_VIEW ? (<>
+          <FormsView
+            forms={state.forms||[]}
+            responses={state.formResponses||[]}
+            ghSettings={cloudConnected?_ghSettings:null}
+            onUpdateForms={forms=>upd({forms})}
+            onUpdateResponses={formResponses=>upd({formResponses})}
+          />
         </>) : activeId === TOKENS_VIEW ? (<>
           <div style={{background:'white',borderBottom:'1px solid rgba(0,0,0,.07)',padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
             <div style={{flex:1}}>
@@ -5294,7 +5876,7 @@ function CRMApp({cryptoKey, initialData, onLock, onLogout}) {
         if (existingData) {
           // Loaded from GitHub — overwrite local state
           skipNextSaveRef.current=true;
-          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[], claudeAccounts:existingData.claudeAccounts||[], claudeTasks:existingData.claudeTasks||[], quotes:existingData.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(existingData.quoteSettings||{})}, invoices:existingData.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(existingData.invoiceSettings||{})}});
+          setState({...existingData, subsections:existingData.subsections||DEFAULT_SUBSECTIONS, members:existingData.members||[], todos:existingData.todos||[], aiEmployees:existingData.aiEmployees||[], claudeAccounts:existingData.claudeAccounts||[], claudeTasks:existingData.claudeTasks||[], quotes:existingData.quotes||[], quoteSettings:{...DEFAULT_QUOTE_SETTINGS, ...(existingData.quoteSettings||{})}, invoices:existingData.invoices||[], invoiceSettings:{...DEFAULT_INVOICE_SETTINGS,...(existingData.invoiceSettings||{})}, forms:existingData.forms&&existingData.forms.length?existingData.forms:[DEFAULT_ONBOARDING_FORM], formResponses:existingData.formResponses||[]});
         } else {
           // No remote yet — push current local state
           await saveEncrypted(cryptoKey, state);
@@ -5371,6 +5953,10 @@ function AuthWrapper(){
   const [cryptoKey,setCryptoKey]=useState(null);
   const [crmData,setCrmData]=useState(null);
   const [prefilledInvite,setPrefilledInvite]=useState('');
+
+  // Public form mode: ?form=<slug> renders the public form without login
+  const publicFormSlug=(()=>{try{return new URLSearchParams(window.location.search).get('form');}catch(e){return null;}})();
+  if(publicFormSlug)return <PublicFormPage slug={publicFormSlug}/>;
 
   useEffect(()=>{
     // Read ?invite=CODE from URL
