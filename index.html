@@ -4915,7 +4915,8 @@ function PublicFormPage({slug}){
   useEffect(()=>{
     (async()=>{
       try{
-        const url=`forms/${slug}.json?t=${Date.now()}`;
+        const dir=window.location.pathname+(window.location.pathname.endsWith('/')?'':'/');
+        const url=`${window.location.origin}${dir}forms/${slug}.json?t=${Date.now()}`;
         const r=await fetch(url,{cache:'no-store'});
         if(!r.ok){setLoadErr('Dieses Formular wurde nicht gefunden oder ist nicht mehr verfügbar.');return;}
         const def=await r.json();
